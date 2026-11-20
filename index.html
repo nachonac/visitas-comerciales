@@ -902,7 +902,7 @@ async function geocode(addr){
 async function rutaDia(d, vs){
   const A = S.aj, puntos = [{n:'Salida', a:A.origen}, ...vs.map(v=>({n:v.cliente, a:v.direccion}))]; if (A.volver) puntos.push({n:'Regreso', a:A.origen});
   const co = []; const fallos = [];
-  for (const p of puntos) { const c = await geocode(p.a); if (!c) fallos.push(p.n); co.push(c); }
+  for (const p of puntos) { const c = (p.n==='Salida'||p.n==='Regreso') && A.oc ? A.oc : await geocode(p.a); if (!c) fallos.push(p.n); co.push(c); }
   if (fallos.length) return {error:'No se encontró la dirección de: '+[...new Set(fallos)].join(', ')};
   const j = await fetchJ('https://router.project-osrm.org/route/v1/driving/'+co.map(c=>c.join(',')).join(';')+'?overview=false');
   if (j.code!=='Ok') return {error:'No se pudo calcular la ruta'};
@@ -944,10 +944,10 @@ window.recalcDia = async d => { if (!S.aj.origen) { closeSheet(); return ajustes
   try { const r = await rutaDia(d, vs); if (r.error) { dialog('No se pudo calcular', r.error+'. Puedes escribir los km a mano.', '<button class="btn btn-d" onclick="closeDialog()">Aceptar</button>'); diaKm(d); } else { await saveKm(d, r); diaKm(d); toast(km1(r.km)+' km'); } }
   catch(e){ diaKm(d); toast('Sin conexión con el servicio de mapas', false); } };
 
-window.ajustesKm = () => { const A = S.aj;
+window.ajustesKm = () => { const A = S.aj; S._oc = A.oc || null;
   $('panel').innerHTML = `<div class="grab"></div><div class="ph"><h2>Ajustes de kilometraje</h2><button class="x" onclick="closeSheet()" aria-label="Cerrar">${ic('x')}</button></div>
     <div class="pb"><div class="group">
-      <div class="field"><label>Punto de salida (casa u oficina) *</label><input id="aj_o" value="${esc(A.origen)}" placeholder="Calle, número, CP y ciudad"></div>
+      <div class="field"><label>Punto de salida (casa u oficina) *</label><input id="aj_o" value="${esc(A.origen)}" placeholder="Calle, número, CP y ciudad" oninput="S._oc=null"><button type="button" class="btn btn-g" id="bgeo" style="margin-top:10px;padding:11px;font-size:14px" onclick="miUbicacion()">${ic('nav')}Usar mi ubicación actual</button></div>
       <label class="field" style="display:flex;align-items:center;gap:10px;cursor:pointer"><input id="aj_v" type="checkbox" ${A.volver?'checked':''} style="width:20px;height:20px;accent-color:var(--teal)"><span style="font-size:15px">Contar el regreso al punto de salida</span></label>
       <div class="field"><label>Importe por kilómetro (€)</label><input id="aj_t" type="number" inputmode="decimal" step="0.01" min="0" value="${A.tarifa}"></div></div>
       <div class="glabel">Datos para la nota de gastos</div>
@@ -957,9 +957,25 @@ window.ajustesKm = () => { const A = S.aj;
       <p style="color:var(--mut);font-size:12.5px;margin:0 4px 14px;line-height:1.5">0,26 €/km es el importe exento de IRPF en España para desplazamientos en vehículo propio. Cámbialo si tu empresa paga otro.</p>
       <button class="btn btn-d" id="bajs" onclick="guardarAj()">${ic('check')}Guardar ajustes</button></div>`;
   openSheet(); };
+window.miUbicacion = () => { const b = $('bgeo');
+  if (!navigator.geolocation) return toast('Este dispositivo no permite obtener la ubicación', false);
+  const txt = b.innerHTML; b.innerHTML = '<div class="spin" style="width:16px;height:16px;border-width:2px"></div> Buscando tu ubicación…'; b.disabled = true;
+  navigator.geolocation.getCurrentPosition(async pos => {
+    const lat = pos.coords.latitude, lon = pos.coords.longitude; S._oc = [lon, lat];
+    let dir = lat.toFixed(5)+', '+lon.toFixed(5);
+    try { const j = await fetchJ('https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=18&addressdetails=1&accept-language=es&email=nruvira%40gmail.com&lat='+lat+'&lon='+lon);
+      const a = j.address||{}; const calle = [a.road||a.pedestrian||a.footway||'', a.house_number||''].filter(Boolean).join(' ');
+      const ciudad = a.city||a.town||a.village||a.municipality||'';
+      const t = [calle, [a.postcode, ciudad].filter(Boolean).join(' ')].filter(Boolean).join(', '); if (t) dir = t; } catch(_){}
+    $('aj_o').value = dir; b.innerHTML = txt; b.disabled = false;
+    toast('Ubicación detectada (precisión ±'+Math.round(pos.coords.accuracy)+' m). Revisa la dirección y guarda.');
+  }, err => { b.innerHTML = txt; b.disabled = false;
+    dialog('No se pudo obtener la ubicación', err.code===1 ? 'Has denegado el permiso. En el iPhone ve a Ajustes > Privacidad y seguridad > Localización > Safari (o Sitios web de Safari) y elige «Al usarse la app». Después vuelve a intentarlo.' : 'No se pudo determinar tu posición. Comprueba que la localización está activada e inténtalo de nuevo, o escribe la dirección a mano.', '<button class="btn btn-d" onclick="closeDialog()">Aceptar</button>'); },
+  {enableHighAccuracy:true, timeout:15000, maximumAge:0}); };
 window.guardarAj = async () => { const a = {origen:$('aj_o').value.trim(), volver:$('aj_v').checked, tarifa:parseFloat(String($('aj_t').value).replace(',','.'))||0, nombre:$('aj_n').value.trim(), empresa:$('aj_e').value.trim(), matricula:$('aj_m').value.trim().toUpperCase()};
+  a.oc = S._oc || null;
   if (!a.origen) return dialog('Falta el punto de salida','Indica la dirección desde la que sales normalmente.','<button class="btn btn-d" onclick="closeDialog()">Aceptar</button>');
-  const cambio = a.origen!==S.aj.origen || a.volver!==S.aj.volver;
+  const cambio = a.origen!==S.aj.origen || String(a.oc)!==String(S.aj.oc||null) || a.volver!==S.aj.volver;
   try { await saveAj(a); closeSheet(); toast('Ajustes guardados');
     if (cambio && Object.values(S.km).some(k=>!k.manual)) dialog('Recalcular kilómetros','Has cambiado el punto de salida o el regreso. Pulsa «Recalcular kilómetros» para actualizar los días ya calculados de este periodo.','<button class="btn btn-d" onclick="closeDialog()">Aceptar</button>');
   } catch(e){ toast('Error: '+e.message,false); } };

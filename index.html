@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#0b1f2e">
+<meta name="theme-color" content="#000000">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Visitas">
@@ -46,7 +46,7 @@ svg.i{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2;stroke
 .btn-s{background:#eef1f4;color:var(--ink)}
 .btn-r{background:#fde8e8;color:var(--sin)}
 .link{color:rgba(255,255,255,.75);font-size:14px;text-align:center;display:block;width:100%;margin-top:14px}
-.demo{margin-top:18px;text-align:center;font-size:14px;color:var(--teal-l)}
+.demo{margin-top:18px;text-align:center;font-size:14px;color:#5eead4}
 
 /* Header */
 .top{background:linear-gradient(160deg,var(--navy2),var(--navy));color:#fff;padding:calc(18px + var(--safe-t)) 20px 70px;position:relative;overflow:hidden}
@@ -170,6 +170,31 @@ svg.i{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2;stroke
 .spin{width:34px;height:34px;border-radius:50%;border:3px solid rgba(255,255,255,.2);border-top-color:var(--teal);animation:sp 0.8s linear infinite}
 @keyframes sp{to{transform:rotate(360deg)}}
 @media(min-width:520px){body{padding:0}}
+
+/* ---- tema negro ---- */
+:root{--navy:#000;--navy2:#0a0a0a;--bg:#000;--card:#141414;--ink:#f2f4f5;--mut:#8b959c;--line:#262626;--teal-l:rgba(20,184,166,.16);--teal-d:#2dd4bf;--sh:0 0 0 1px #1f1f1f}
+html,body{background:#000}
+#app{box-shadow:none}
+.login{background:radial-gradient(120% 70% at 100% 0%,rgba(20,184,166,.55) 0%,transparent 55%),radial-gradient(90% 50% at 0% 100%,rgba(20,184,166,.18) 0%,transparent 60%),#000}
+.top{background:#000}
+.top::after{background:radial-gradient(circle,rgba(20,184,166,.35),transparent 70%)}
+.btn-d{background:#f2f4f5;color:#000}
+.btn-s{background:#1f1f1f;color:var(--ink)}
+.btn-r{background:rgba(220,38,38,.16);color:#f87171}
+.bar{background:#1f1f1f}
+.chip.on{background:var(--teal);color:#042f2e;border-color:var(--teal)}
+.v .note{color:#b4bcc2}
+.nav{background:rgba(10,10,10,.88);border-top-color:#1f1f1f}
+.sheet,.dialog{background:rgba(0,0,0,.7)}
+.panel{background:#0a0a0a}.ph{background:#0a0a0a}
+.grab{background:#333}.x{background:#1f1f1f;color:var(--ink)}
+.drop{border-color:#333}
+.dialog>div{background:#161616;color:var(--ink)}
+.loading{background:#000}
+input,textarea,select{color:var(--ink)}
+input::placeholder,textarea::placeholder{color:#5f686e}
+input[type=date],input[type=time]{color-scheme:dark}
+.search input{color:var(--ink)}
 </style>
 </head>
 <body>
@@ -205,8 +230,8 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const RES = ['Pendiente','Interesado','Seguimiento','Venta','Sin interés'];
 const TIPOS = ['Presencial','Telefónica','Videollamada','Feria'];
-const COL = {Pendiente:'#64748b',Interesado:'#0d9488',Seguimiento:'#d97706',Venta:'#16a34a','Sin interés':'#dc2626'};
-const BG = {Pendiente:'#f1f5f9',Interesado:'#ccfbf1',Seguimiento:'#fef3c7',Venta:'#dcfce7','Sin interés':'#fee2e2'};
+const COL = {Pendiente:'#94a3b8',Interesado:'#2dd4bf',Seguimiento:'#fbbf24',Venta:'#4ade80','Sin interés':'#f87171'};
+const BG = {Pendiente:'rgba(148,163,184,.16)',Interesado:'rgba(20,184,166,.16)',Seguimiento:'rgba(245,158,11,.16)',Venta:'rgba(34,197,94,.16)','Sin interés':'rgba(239,68,68,.16)'};
 const P = {
   plus:'<path d="M12 5v14M5 12h14"/>', home:'<path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
   list:'<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>', search:'<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
@@ -364,10 +389,10 @@ function homeView(){
   const ult = [...V].sort((a,b)=>b.fecha.localeCompare(a.fecha)).slice(0,3);
   const k = (icn,bg,col,val,lab) => `<div class="kpi"><div class="ic" style="background:${bg};color:${col}">${ic(icn)}</div><b>${val}</b><span>${lab}</span></div>`;
   return `<div class="kpis">
-      ${k('cal','#e0f2fe','#0369a1',delMes.length,'Visitas este mes')}
-      ${k('check','#dcfce7','#16a34a',ventas.length,'Ventas cerradas')}
-      ${k('euro','#fef3c7','#b45309',money(facturado),'Vendido este mes')}
-      ${k('trend','#ccfbf1','#0d9488',conv+'%','Conversión')}
+      ${k('cal','rgba(56,189,248,.15)','#38bdf8',delMes.length,'Visitas este mes')}
+      ${k('check','rgba(34,197,94,.15)','#4ade80',ventas.length,'Ventas cerradas')}
+      ${k('euro','rgba(245,158,11,.15)','#fbbf24',money(facturado),'Vendido este mes')}
+      ${k('trend','rgba(20,184,166,.16)','#2dd4bf',conv+'%','Conversión')}
     </div>
     <div class="conv"><div class="rb"><b style="font-weight:600">Resultados</b><small style="color:var(--mut)">${V.length} visitas</small></div>
       <div class="bar">${RES.map(r=>{const n=V.filter(x=>x.resultado===r).length;return n?`<i style="width:${n/V.length*100}%;background:${COL[r]}"></i>`:''}).join('')}</div>
@@ -417,9 +442,9 @@ window.detalle = id => {
       <h3 style="margin-top:10px">${esc(x.cliente)}</h3>
       <div style="color:var(--mut);margin-top:4px">${dayLabel(x.fecha)} · ${fTime(x.fecha)} · ${x.tipo}</div></div></div>
     <div class="actions">
-      <a class="${x.direccion?'':'dis'}" href="${x.direccion?mapsUrl(x.direccion):'#'}" target="_blank" rel="noopener"><div class="ic" style="background:#ccfbf1;color:#0d9488">${ic('nav')}</div>Cómo llegar</a>
-      <a class="${tel?'':'dis'}" href="tel:${esc(tel)}"><div class="ic" style="background:#e0f2fe;color:#0369a1">${ic('phone')}</div>Llamar</a>
-      <button onclick="editar('${x.id}')"><div class="ic" style="background:#f1f5f9;color:#334155">${ic('edit')}</div>Editar</button>
+      <a class="${x.direccion?'':'dis'}" href="${x.direccion?mapsUrl(x.direccion):'#'}" target="_blank" rel="noopener"><div class="ic" style="background:rgba(20,184,166,.16);color:#2dd4bf">${ic('nav')}</div>Cómo llegar</a>
+      <a class="${tel?'':'dis'}" href="tel:${esc(tel)}"><div class="ic" style="background:rgba(56,189,248,.15);color:#38bdf8">${ic('phone')}</div>Llamar</a>
+      <button onclick="editar('${x.id}')"><div class="ic" style="background:#1f1f1f;color:#e5e7eb">${ic('edit')}</div>Editar</button>
     </div>
     <div class="info group">
       ${x.contacto?`<div class="row-i">${ic('user')}<div><small>Contacto</small><p>${esc(x.contacto)}${x.telefono?' · '+esc(x.telefono):''}</p></div></div>`:''}

@@ -195,6 +195,16 @@ input,textarea,select{color:var(--ink)}
 input::placeholder,textarea::placeholder{color:#5f686e}
 input[type=date],input[type=time]{color-scheme:dark}
 .search input{color:var(--ink)}
+.nav{padding-left:8px;padding-right:8px}.nav button{min-width:58px}
+.filters{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+.sel{position:relative;display:block;background:var(--card);border:1px solid var(--line);border-radius:12px}
+.sel.on{border-color:var(--teal);background:rgba(20,184,166,.1)}
+.sel::after{content:"";position:absolute;right:12px;top:50%;width:7px;height:7px;border-right:2px solid var(--mut);border-bottom:2px solid var(--mut);transform:translateY(-70%) rotate(45deg);pointer-events:none}
+.sel select{appearance:none;-webkit-appearance:none;width:100%;background:none;border:0;outline:0;color:var(--ink);font:inherit;font-size:13.5px;padding:11px 28px 11px 12px;text-overflow:ellipsis}
+.sel select option,.mapsel option{background:#141414;color:#f2f4f5}
+.mapsel{width:100%;background:none;border:0;outline:0;color:var(--ink);font:inherit;font-size:16px;padding:2px 0;-webkit-appearance:none;appearance:none}
+.rb{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.toast{background:#1c1c1c;color:#fff;border:1px solid #2e2e2e}
 </style>
 </head>
 <body>
@@ -205,6 +215,7 @@ input[type=date],input[type=time]{color-scheme:dark}
 <div class="toast" id="toast"></div>
 <input type="file" id="cam" accept="image/*" capture="environment" hidden>
 <input type="file" id="gal" accept="image/*" hidden>
+<input type="file" id="impf" accept=".csv,.txt,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" hidden>
 
 <script>
 window.addEventListener('error',function(e){var d=document.getElementById('jserr');if(!d){d=document.createElement('div');d.id='jserr';d.style.cssText='position:fixed;left:12px;right:12px;bottom:12px;background:#b91c1c;color:#fff;padding:12px;border-radius:12px;font:14px sans-serif;z-index:9999';document.body.appendChild(d);}d.textContent='Error al cargar la app: '+(e.message||'desconocido');});
@@ -213,7 +224,7 @@ setTimeout(function(){if(!window.doLogin){window.doLogin=function(){alert('La ap
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js';
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js';
-import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, writeBatch } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
 
 const fb = initializeApp({
   apiKey: 'AIzaSyDvlV_8AJYd0w1_2Vs6uBO3klU7SlwWEX8',
@@ -243,7 +254,7 @@ const P = {
   user:'<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>', note:'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/>',
   flag:'<path d="M4 22V4a1 1 0 0 1 1-1h12l-2 4 2 4H5"/>', euro:'<path d="M4 10h12M4 14h9M19 6a7.7 7.7 0 0 0-5.2-2A7.9 7.9 0 0 0 6 12c0 4.4 3.5 8 7.8 8 2 0 3.8-.8 5.2-2"/>',
   check:'<path d="M20 6 9 17l-5-5"/>', trend:'<path d="m22 7-8.5 8.5-5-5L2 17"/><path d="M16 7h6v6"/>', clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
-  out:'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>', down:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>',
+  out:'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>', up:'<path d="M12 20V8M6 14l6-6 6 6M5 4h14"/>', down:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>',
   pinW:'<path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/>',
 };
 const ic = (n, s='') => `<svg class="i" viewBox="0 0 24 24" ${s}>${P[n]}</svg>`;
@@ -264,7 +275,8 @@ window.closeDialog = () => $('dialog').style.display='none';
 window.verFoto = src => { $('vimg').src=src; $('viewer').style.display='flex'; };
 
 /* ---------- estado ---------- */
-let S = { user:undefined, demo:false, visitas:[], tab:'inicio', q:'', filtro:'', online:true, unsub:null, form:null, detail:null };
+let S = { user:undefined, demo:false, visitas:[], tab:'inicio', q:'', filtro:'', online:true, unsub:null, form:null, detail:null, clientes:[], unsubC:null, cq:'', cprov:'', cpob:'', csec:'', cvis:'', cmax:100, imp:null, cform:null };
+window.S = S;
 
 const demoData = () => {
   const d=(n,h)=>{const x=new Date();x.setDate(x.getDate()-n);x.setHours(h,15,0,0);return x.toISOString()};
@@ -280,6 +292,7 @@ const demoData = () => {
 /* ---------- datos ---------- */
 function listen(){
   if (S.unsub) S.unsub();
+  listenClientes();
   if (S.demo) { S.visitas = demoData(); render(); return; }
   S.unsub = onSnapshot(collection(db,'usuarios',S.user.uid,'visitas'), snap => {
     S.visitas = snap.docs.map(d => d.data()); S.online = true; render();
@@ -335,14 +348,15 @@ window.resetPass = async () => {
 };
 window.demo = () => { S.demo = true; S.user = {email:'demo@visitas.app', uid:'demo'}; listen(); };
 window.salir = () => dialog('Cerrar sesión','¿Quieres cerrar la sesión en este dispositivo?','<button class="btn btn-s" onclick="closeDialog()">Cancelar</button><button class="btn btn-d" onclick="closeDialog();doSalir()">Salir</button>');
-window.doSalir = () => { if (S.demo) { S.demo=false; S.user=null; S.visitas=[]; render(); } else signOut(auth); };
+window.doSalir = () => { if (S.demo) { S.demo=false; S.user=null; S.visitas=[]; S.clientes=[]; render(); } else { if(S.unsubC)S.unsubC(); S.clientes=[]; signOut(auth); } };
 
 /* ---------- vistas ---------- */
 function render(){
   const app = $('app');
   if (S.user === undefined) { app.innerHTML = '<div class="loading"><div class="spin"></div></div>'; return; }
   if (!S.user) { app.innerHTML = loginView(); return; }
-  app.innerHTML = header() + `<div class="content">${S.tab==='inicio' ? homeView() : listView()}</div>` + nav();
+  app.innerHTML = header() + `<div class="content">${S.tab==='inicio' ? homeView() : S.tab==='clientes' ? clientesView() : listView()}</div>` + nav();
+  if (S.tab==='clientes' && S._focusC) { const q=$('cq'); if(q){ q.focus(); q.setSelectionRange(q.value.length,q.value.length);} S._focusC=false; }
   if (S.tab==='visitas') { const q=$('q'); if (q && S._focus) { q.focus(); q.setSelectionRange(q.value.length,q.value.length); } }
 }
 function loginView(){
@@ -364,7 +378,7 @@ function header(){
   const h = new Date().getHours(), saludo = h<13?'Buenos días':h<20?'Buenas tardes':'Buenas noches';
   const name = (S.user.email||'').split('@')[0];
   return `<div class="top"><div class="top-row">
-      <div class="hello"><small>${saludo}</small><b>${S.tab==='inicio'?'Resumen comercial':'Mis visitas'}</b></div>
+      <div class="hello"><small>${saludo}</small><b>${S.tab==='inicio'?'Resumen comercial':S.tab==='clientes'?'Mis clientes':'Mis visitas'}</b></div>
       <button class="avatar" onclick="salir()" aria-label="Cuenta">${esc(initials(name.replace(/[._-]/g,' ')))}</button>
     </div>
     <div class="sync"><span class="dot ${S.online?'':'off'}"></span>${S.demo?'Modo demostración':esc(S.user.email)+' · '+(S.online?'Sincronizado':'Sin conexión')}</div>
@@ -373,8 +387,10 @@ function header(){
 function nav(){
   return `<nav class="nav">
     <button class="${S.tab==='inicio'?'on':''}" onclick="go('inicio')">${ic('home')}Inicio</button>
+    <button class="${S.tab==='clientes'?'on':''}" onclick="go('clientes')">${ic('user')}Clientes</button>
     <button class="fab" onclick="nueva()" aria-label="Nueva visita">${ic('plus')}</button>
     <button class="${S.tab==='visitas'?'on':''}" onclick="go('visitas')">${ic('list')}Visitas</button>
+    <button onclick="S.tab==='clientes'?importar():exportar()">${ic(S.tab==='clientes'?'up':'down')}${S.tab==='clientes'?'Importar':'Exportar'}</button>
   </nav>`;
 }
 window.go = t => { S.tab = t; S._focus=false; render(); window.scrollTo(0,0); };
@@ -466,6 +482,7 @@ window.nueva = () => { S.form = blank(); renderForm(); openSheet(); };
 window.editar = id => { S.form = {...S.visitas.find(v=>v.id===id)}; renderForm(); };
 const localDT = iso => { const d=new Date(iso); const p=n=>String(n).padStart(2,'0'); return [`${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`, `${p(d.getHours())}:${p(d.getMinutes())}`]; };
 window.F = (k, v) => { S.form[k] = v; };
+window.autoCli = v => { const c = S.clientes.find(x=>norm(x.nombre)===norm(v)); if(!c) return; const f=S.form; f.clienteId=c.id; if(!f.contacto) f.contacto=c.contacto||''; if(!f.telefono) f.telefono=c.telefono||''; if(!f.direccion) f.direccion=fullAddr(c); renderForm(); toast('Datos del cliente completados'); };
 window.FD = () => { const d=$('fd').value, t=$('ft').value||'00:00'; if(d) S.form.fecha = new Date(d+'T'+t).toISOString(); };
 window.FS = (k, v) => { S.form[k] = v; renderForm(); };
 function renderForm(){
@@ -476,8 +493,8 @@ function renderForm(){
     <div class="ph"><h2>${f.id?'Editar visita':'Nueva visita'}</h2><button class="x" onclick="closeSheet()" aria-label="Cerrar">${ic('x')}</button></div>
     <div class="pb">
       <div class="group">
-        ${fld('cliente','Cliente *','Nombre de la empresa','text','autocomplete="organization" list="clis"')}
-        <datalist id="clis">${[...new Set(S.visitas.map(v=>v.cliente))].map(c=>`<option value="${esc(c)}">`).join('')}</datalist>
+        ${fld('cliente','Cliente *','Escribe o elige de tus clientes','text','autocomplete="off" list="clis" onchange="autoCli(this.value)"')}
+        <datalist id="clis">${[...new Set([...S.clientes.map(c=>c.nombre),...S.visitas.map(v=>v.cliente)])].map(c=>`<option value="${esc(c)}">`).join('')}</datalist>
         <div class="two"><div class="field"><label>Fecha</label><input id="fd" type="date" value="${d}" onchange="FD()"></div><div class="field"><label>Hora</label><input id="ft" type="time" value="${t}" onchange="FD()"></div></div>
       </div>
       <div class="glabel">Tarjeta de visita</div>
@@ -489,9 +506,9 @@ function renderForm(){
         ${fld('direccion','Dirección','Calle, número, población','text','autocomplete="street-address"')}
       </div>
       <div class="glabel">Tipo de visita</div>
-      <div class="seg">${TIPOS.map(x=>`<button class="${f.tipo===x?'on':''}" style="${f.tipo===x?'background:var(--ink);border-color:var(--ink)':''}" onclick="FS('tipo','${x}')">${x}</button>`).join('')}</div>
+      <div class="seg">${TIPOS.map(x=>`<button class="${f.tipo===x?'on':''}" style="${f.tipo===x?'background:var(--ink);border-color:var(--ink);color:#000':''}" onclick="FS('tipo','${x}')">${x}</button>`).join('')}</div>
       <div class="glabel">Resultado</div>
-      <div class="seg">${RES.map(x=>`<button class="${f.resultado===x?'on':''}" style="${f.resultado===x?`background:${COL[x]};border-color:${COL[x]}`:''}" onclick="FS('resultado','${x}')"><i style="background:${f.resultado===x?'#fff':COL[x]}"></i>${x}</button>`).join('')}</div>
+      <div class="seg">${RES.map(x=>`<button class="${f.resultado===x?'on':''}" style="${f.resultado===x?`background:${COL[x]};border-color:${COL[x]};color:#000`:''}" onclick="FS('resultado','${x}')"><i style="background:${f.resultado===x?'#000':COL[x]}"></i>${x}</button>`).join('')}</div>
       <div class="group">
         ${fld('importe','Importe (€)','Si hay venta u oferta','number','inputmode="decimal" step="0.01" min="0"')}
         <div class="field"><label>Notas de la visita</label><textarea placeholder="Temas tratados, necesidades, objeciones…" oninput="F('notas',this.value)">${esc(f.notas)}</textarea></div>
@@ -511,6 +528,218 @@ window.guardar = async () => {
   $('bsave').innerHTML = '<div class="spin" style="width:20px;height:20px;border-width:2px"></div>';
   try { await saveVisit(v); S.form=null; closeSheet(); toast(f.id?'Visita actualizada':'Visita guardada'); }
   catch(e){ renderForm(); dialog('No se pudo guardar', e.code==='permission-denied'?'No tienes permiso para guardar. Vuelve a iniciar sesión.':e.message, '<button class="btn btn-d" onclick="closeDialog()">Aceptar</button>'); }
+};
+
+/* ---------- clientes ---------- */
+const CF = [ // campo, etiqueta, sinónimos de cabecera
+  ['nombre','Nombre / empresa *',['nombre','cliente','empresa','razon social','razón social','nombre comercial','denominacion','denominación','name','company']],
+  ['contacto','Persona de contacto',['contacto','persona de contacto','persona','responsable','contact']],
+  ['telefono','Teléfono',['telefono','teléfono','tel','tlf','movil','móvil','phone','telefono 1','teléfono 1']],
+  ['email','Email',['email','e-mail','correo','mail','correo electronico','correo electrónico']],
+  ['direccion','Dirección',['direccion','dirección','domicilio','calle','address','dir']],
+  ['cp','Código postal',['cp','c.p.','codigo postal','código postal','postal','zip']],
+  ['poblacion','Población',['poblacion','población','localidad','ciudad','municipio','city','town']],
+  ['provincia','Provincia',['provincia','region','región','state','comunidad']],
+  ['sector','Sector / tipo',['sector','tipo','categoria','categoría','actividad','segmento','zona','grupo']],
+  ['notas','Notas',['notas','observaciones','comentarios','nota','notes']],
+];
+const norm = s => String(s??'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim();
+const fullAddr = c => [c.direccion, [c.cp, c.poblacion].filter(Boolean).join(' '), c.provincia].filter(Boolean).join(', ');
+const newId = () => Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+const demoClientes = () => [
+  {id:'c1',nombre:'Textiles Levante S.L.',contacto:'Laura Martínez',telefono:'961234567',email:'laura@textileslevante.es',direccion:'Av. de la Industria 12',cp:'46980',poblacion:'Paterna',provincia:'Valencia',sector:'Textil',notas:''},
+  {id:'c2',nombre:'Serigrafía Turia',contacto:'Pedro Gil',telefono:'963112233',email:'',direccion:'Calle Músico Ginés 8',cp:'46022',poblacion:'Valencia',provincia:'Valencia',sector:'Serigrafía',notas:''},
+  {id:'c3',nombre:'Print Castellón',contacto:'Marta Soler',telefono:'964220011',email:'',direccion:'Polígono El Serrallo',cp:'12100',poblacion:'Castellón de la Plana',provincia:'Castellón',sector:'Imprenta',notas:''},
+  {id:'c4',nombre:'Grafimar',contacto:'Ana Ruiz',telefono:'965443322',email:'',direccion:'Calle Mayor 3',cp:'03001',poblacion:'Alicante',provincia:'Alicante',sector:'Imprenta',notas:''},
+  {id:'c5',nombre:'Estampados Alzira',contacto:'Jorge Peris',telefono:'962410000',email:'',direccion:'Carrer Major 45',cp:'46600',poblacion:'Alzira',provincia:'Valencia',sector:'Textil',notas:''},
+  {id:'c6',nombre:'Rotulación Elche',contacto:'Sara Pastor',telefono:'966001122',email:'',direccion:'Av. Libertad 101',cp:'03205',poblacion:'Elche',provincia:'Alicante',sector:'Rotulación',notas:''},
+  {id:'c7',nombre:'Sublima Gandia',contacto:'Toni Ferrer',telefono:'962871234',email:'',direccion:'Passeig Germanies 20',cp:'46701',poblacion:'Gandia',provincia:'Valencia',sector:'Sublimación',notas:''},
+  {id:'c8',nombre:'DTF Vila-real',contacto:'Lucía Broch',telefono:'964530987',email:'',direccion:'Calle Ermita 7',cp:'12540',poblacion:'Vila-real',provincia:'Castellón',sector:'DTF',notas:''},
+];
+function listenClientes(){
+  if (S.unsubC) S.unsubC();
+  if (S.demo) { S.clientes = demoClientes(); return; }
+  S.unsubC = onSnapshot(collection(db,'usuarios',S.user.uid,'clientes'), snap => { S.clientes = snap.docs.map(d=>d.data()); render(); },
+    err => toast(err.code==='permission-denied'?'Sin permiso para leer clientes':'Sin conexión con la nube', false));
+}
+async function saveCliente(c){
+  if (S.demo) { const i=S.clientes.findIndex(x=>x.id===c.id); i>=0?S.clientes[i]=c:S.clientes.push(c); render(); return; }
+  await setDoc(doc(db,'usuarios',S.user.uid,'clientes',c.id), c);
+}
+async function saveClientesLote(list, onProg){
+  if (S.demo) { for (const c of list){ const i=S.clientes.findIndex(x=>x.id===c.id); i>=0?S.clientes[i]=c:S.clientes.push(c);} render(); return; }
+  for (let i=0;i<list.length;i+=400){ const b=writeBatch(db); list.slice(i,i+400).forEach(c=>b.set(doc(db,'usuarios',S.user.uid,'clientes',c.id),c)); await b.commit(); onProg && onProg(Math.min(i+400,list.length)); }
+}
+async function borrarClientesLote(ids){
+  if (S.demo) { S.clientes=S.clientes.filter(c=>!ids.includes(c.id)); render(); return; }
+  for (let i=0;i<ids.length;i+=400){ const b=writeBatch(db); ids.slice(i,i+400).forEach(id=>b.delete(doc(db,'usuarios',S.user.uid,'clientes',id))); await b.commit(); }
+}
+const visitasDe = c => S.visitas.filter(v => v.clienteId===c.id || norm(v.cliente)===norm(c.nombre));
+function filtrarClientes(){
+  const q = norm(S.cq);
+  let L = S.clientes.filter(c => (!S.cprov || c.provincia===S.cprov) && (!S.cpob || c.poblacion===S.cpob) && (!S.csec || c.sector===S.csec)
+    && (!q || norm([c.nombre,c.contacto,c.direccion,c.poblacion,c.provincia,c.cp,c.sector,c.telefono,c.email].join(' ')).includes(q)));
+  if (S.cvis) { L = L.filter(c => { const n = visitasDe(c).length; return S.cvis==='con' ? n>0 : n===0; }); }
+  return L.sort((a,b)=>a.nombre.localeCompare(b.nombre,'es',{numeric:true}));
+}
+const uniq = (arr) => [...new Set(arr.filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
+function clientesView(){
+  const C = S.clientes;
+  if (!C.length) return `<div class="empty"><div class="ic">${ic('user')}</div><b style="color:var(--ink);font-weight:600">Aún no tienes clientes</b><p style="margin:6px 0 18px">Importa tu base de datos desde Excel o CSV, o añádelos uno a uno.</p>
+    <button class="btn btn-p" onclick="importar()">${ic('up')}Importar clientes</button><button class="btn btn-s" style="margin-top:10px" onclick="nuevoCliente()">${ic('plus')}Añadir cliente</button></div>`;
+  const provs = uniq(C.map(c=>c.provincia));
+  const pobs = uniq(C.filter(c=>!S.cprov||c.provincia===S.cprov).map(c=>c.poblacion));
+  const secs = uniq(C.map(c=>c.sector));
+  const L = filtrarClientes(), shown = L.slice(0, S.cmax);
+  const sel = (id, val, all, opts, fn) => `<label class="sel ${val?'on':''}"><select onchange="${fn}(this.value)"><option value="">${all}</option>${opts.map(o=>`<option ${o===val?'selected':''}>${esc(o)}</option>`).join('')}</select></label>`;
+  const activos = [S.cprov,S.cpob,S.csec,S.cvis].filter(Boolean).length;
+  return `<div class="search">${ic('search')}<input id="cq" placeholder="Buscar nombre, población, CP, teléfono…" value="${esc(S.cq)}" oninput="C_q(this.value)"></div>
+    <div class="filters">
+      ${provs.length?sel('fp',S.cprov,'Todas las provincias',provs,'C_prov'):''}
+      ${pobs.length?sel('fl',S.cpob,'Todas las poblaciones',pobs,'C_pob'):''}
+      ${secs.length?sel('fs',S.csec,'Todos los sectores',secs,'C_sec'):''}
+      <label class="sel ${S.cvis?'on':''}"><select onchange="C_vis(this.value)"><option value="">Visitados y sin visitar</option><option value="con" ${S.cvis==='con'?'selected':''}>Ya visitados</option><option value="sin" ${S.cvis==='sin'?'selected':''}>Sin visitar</option></select></label>
+    </div>
+    <div class="rb" style="margin:14px 4px 10px"><small style="color:var(--mut)">${L.length} de ${C.length} clientes${activos?` · <button style="color:var(--teal-d);font-size:13px" onclick="C_reset()">Quitar filtros</button>`:''}</small>
+      <span style="display:flex;gap:14px"><button style="color:var(--teal-d);font-size:14px;font-weight:500" onclick="importar()">Importar</button><button style="color:var(--teal-d);font-size:14px;font-weight:500" onclick="nuevoCliente()">+ Nuevo</button></span></div>
+    ${shown.map(cliCard).join('') || '<div class="empty">No hay clientes que coincidan.</div>'}
+    ${L.length>shown.length?`<button class="btn btn-s" style="margin-top:6px" onclick="S.cmax+=100;render()">Mostrar más (${L.length-shown.length})</button>`:''}
+    ${L.length && fullAddr(L[0]) ? '' : ''}`;
+}
+function cliCard(c){
+  const n = visitasDe(c).length, loc = [c.poblacion, c.provincia].filter(Boolean).join(' · ');
+  return `<button class="v" onclick="cliente('${c.id}')">
+    <div class="thumb" style="background:rgba(56,189,248,.14);color:#7dd3fc">${esc(initials(c.nombre))}</div>
+    <div class="body"><div class="t"><b>${esc(c.nombre)}</b>${n?`<span class="pill" style="background:rgba(20,184,166,.16);color:#2dd4bf">${n} visita${n>1?'s':''}</span>`:`<span class="pill" style="background:#1f1f1f;color:var(--mut)">Sin visitar</span>`}</div>
+    <div class="meta">${esc(loc||c.direccion||'Sin dirección')}${c.sector?' · '+esc(c.sector):''}</div>
+    ${c.contacto?`<div class="note">${esc(c.contacto)}${c.telefono?' · '+esc(c.telefono):''}</div>`:''}</div></button>`;
+}
+window.C_q = v => { S.cq=v; S.cmax=100; S._focusC=true; render(); };
+window.C_prov = v => { S.cprov=v; S.cpob=''; S.cmax=100; render(); };
+window.C_pob = v => { S.cpob=v; S.cmax=100; render(); };
+window.C_sec = v => { S.csec=v; S.cmax=100; render(); };
+window.C_vis = v => { S.cvis=v; S.cmax=100; render(); };
+window.C_reset = () => { S.cprov=S.cpob=S.csec=S.cvis=''; S.cq=''; render(); };
+
+window.cliente = id => {
+  const c = S.clientes.find(x=>x.id===id); if (!c) return;
+  const tel=(c.telefono||'').replace(/\s/g,''), addr=fullAddr(c), V=visitasDe(c).sort((a,b)=>b.fecha.localeCompare(a.fecha));
+  $('panel').innerHTML = `<div class="grab"></div>
+    <div class="ph"><span></span><button class="x" onclick="closeSheet()" aria-label="Cerrar">${ic('x')}</button></div>
+    <div class="hero"><div class="in">${c.sector?`<span class="pill" style="background:rgba(56,189,248,.14);color:#7dd3fc">${esc(c.sector)}</span>`:''}
+      <h3 style="margin-top:10px">${esc(c.nombre)}</h3><div style="color:var(--mut);margin-top:4px">${esc([c.poblacion,c.provincia].filter(Boolean).join(' · ')||'Sin población')}</div></div></div>
+    <div class="actions">
+      <a class="${addr?'':'dis'}" href="${addr?mapsUrl(addr):'#'}" target="_blank" rel="noopener"><div class="ic" style="background:rgba(20,184,166,.16);color:#2dd4bf">${ic('nav')}</div>Cómo llegar</a>
+      <a class="${tel?'':'dis'}" href="tel:${esc(tel)}"><div class="ic" style="background:rgba(56,189,248,.15);color:#38bdf8">${ic('phone')}</div>Llamar</a>
+      <button onclick="visitaDe('${c.id}')"><div class="ic" style="background:rgba(245,158,11,.15);color:#fbbf24">${ic('plus')}</div>Nueva visita</button>
+    </div>
+    <div class="info group">
+      ${c.contacto?`<div class="row-i">${ic('user')}<div><small>Contacto</small><p>${esc(c.contacto)}</p></div></div>`:''}
+      ${c.telefono?`<div class="row-i">${ic('phone')}<div><small>Teléfono</small><p>${esc(c.telefono)}</p></div></div>`:''}
+      ${c.email?`<div class="row-i">${ic('note')}<div><small>Email</small><p><a href="mailto:${esc(c.email)}" style="color:var(--teal-d)">${esc(c.email)}</a></p></div></div>`:''}
+      ${addr?`<div class="row-i">${ic('pin')}<div><small>Dirección</small><p>${esc(addr)}</p></div></div>`:''}
+      ${c.notas?`<div class="row-i">${ic('note')}<div><small>Notas</small><p>${esc(c.notas)}</p></div></div>`:''}
+    </div>
+    <div class="pb"><div class="glabel" style="margin-top:0">Visitas a este cliente · ${V.length}</div>
+      ${V.length?V.map(card).join(''):'<div class="task" style="color:var(--mut)">Todavía no lo has visitado.</div>'}
+      <div class="two" style="margin-top:14px;gap:10px"><button class="btn btn-s" onclick="editarCliente('${c.id}')">${ic('edit')}Editar</button><button class="btn btn-r" onclick="borrarCliente('${c.id}')">${ic('trash')}Eliminar</button></div></div>`;
+  openSheet();
+};
+window.visitaDe = id => { const c=S.clientes.find(x=>x.id===id);
+  S.form = {...blank(), cliente:c.nombre, clienteId:c.id, contacto:c.contacto||'', telefono:c.telefono||'', direccion:fullAddr(c)}; renderForm(); $('panel').scrollTop=0; };
+window.borrarCliente = id => { const c=S.clientes.find(x=>x.id===id);
+  dialog('Eliminar cliente', `Se eliminará ${c.nombre} de tu base de clientes. Sus visitas no se borran.`, `<button class="btn btn-s" onclick="closeDialog()">Cancelar</button><button class="btn" style="background:var(--sin);color:#fff" onclick="closeDialog();confBorrarCliente('${id}')">Eliminar</button>`); };
+window.confBorrarCliente = async id => { closeSheet(); try { await borrarClientesLote([id]); toast('Cliente eliminado'); } catch(e){ toast('Error: '+e.message,false); } };
+
+window.nuevoCliente = () => { S.cform = {id:'',nombre:'',contacto:'',telefono:'',email:'',direccion:'',cp:'',poblacion:'',provincia:'',sector:'',notas:''}; renderCliForm(); openSheet(); };
+window.editarCliente = id => { S.cform = {...S.clientes.find(x=>x.id===id)}; renderCliForm(); };
+window.CFv = (k,v) => { S.cform[k]=v; };
+function renderCliForm(){
+  const f=S.cform, fld=(k,lab,ph,type='text')=>`<div class="field"><label>${lab}</label><input type="${type}" value="${esc(f[k])}" placeholder="${ph}" oninput="CFv('${k}',this.value)"></div>`;
+  $('panel').innerHTML = `<div class="grab"></div><div class="ph"><h2>${f.id?'Editar cliente':'Nuevo cliente'}</h2><button class="x" onclick="closeSheet()" aria-label="Cerrar">${ic('x')}</button></div>
+    <div class="pb"><div class="group">${fld('nombre','Nombre / empresa *','Nombre del cliente')}${fld('sector','Sector / tipo','Ej.: textil, imprenta')}</div>
+    <div class="group">${fld('contacto','Persona de contacto','Nombre y cargo')}${fld('telefono','Teléfono','600 000 000','tel')}${fld('email','Email','cliente@empresa.es','email')}</div>
+    <div class="group">${fld('direccion','Dirección','Calle y número')}<div class="two">${fld('cp','Código postal','46000')}${fld('poblacion','Población','Valencia')}</div>${fld('provincia','Provincia','Valencia')}</div>
+    <div class="group"><div class="field"><label>Notas</label><textarea placeholder="Horario, observaciones…" oninput="CFv('notas',this.value)">${esc(f.notas)}</textarea></div></div>
+    <button class="btn btn-d" id="bcsave" onclick="guardarCliente()">${ic('check')}Guardar cliente</button></div>`;
+}
+window.guardarCliente = async () => {
+  const f=S.cform; if (!f.nombre.trim()) return dialog('Falta el nombre','Indica el nombre del cliente.','<button class="btn btn-d" onclick="closeDialog()">Aceptar</button>');
+  const c={...f, nombre:f.nombre.trim(), id:f.id||newId(), actualizado:new Date().toISOString()};
+  $('bcsave').innerHTML='<div class="spin" style="width:20px;height:20px;border-width:2px"></div>';
+  try { await saveCliente(c); closeSheet(); toast(f.id?'Cliente actualizado':'Cliente guardado'); if (S.tab!=='clientes') go('clientes'); }
+  catch(e){ renderCliForm(); dialog('No se pudo guardar', e.code==='permission-denied'?'Falta dar permiso a la base de datos para guardar clientes.':e.message,'<button class="btn btn-d" onclick="closeDialog()">Aceptar</button>'); }
+};
+
+/* ---------- importar ---------- */
+window.importar = () => { S.imp = null; renderImport(); openSheet(); };
+function renderImport(){
+  const I = S.imp;
+  let body;
+  if (!I) body = `<p style="color:var(--mut);line-height:1.5;margin-bottom:14px">Sube un archivo Excel (.xlsx, .xls) o CSV con una fila de cabecera. La app reconoce columnas como Nombre, Contacto, Teléfono, Email, Dirección, CP, Población, Provincia, Sector y Notas.</p>
+    <button class="drop" onclick="$('impf').click()"><div class="ic">${ic('up')}</div><b>Elegir archivo</b><span style="font-size:13px">Excel o CSV</span></button>
+    <button class="btn btn-s" onclick="plantilla()">${ic('down')}Descargar plantilla de ejemplo</button>
+    ${S.clientes.length?`<button class="btn btn-r" style="margin-top:10px" onclick="vaciarClientes()">${ic('trash')}Borrar todos los clientes (${S.clientes.length})</button>`:''}`;
+  else {
+    const prev = I.rows.slice(0,3).map(r=>mapRow(r)).map(c=>`<div class="task" style="display:block"><b>${esc(c.nombre||'(sin nombre)')}</b><small>${esc([fullAddr(c),c.telefono].filter(Boolean).join(' · ')||'—')}</small></div>`).join('');
+    body = `<div class="task" style="display:block"><b>${esc(I.name)}</b><small>${I.rows.length} filas encontradas</small></div>
+      <div class="glabel">Columnas de tu archivo</div>
+      <div class="group">${CF.map(([k,lab])=>`<div class="field"><label>${lab}</label><select class="mapsel" onchange="IM('${k}',this.value)"><option value="">— No importar —</option>${I.headers.map((h,i)=>`<option value="${i}" ${I.map[k]===i?'selected':''}>${esc(h||'Columna '+(i+1))}</option>`).join('')}</select></div>`).join('')}</div>
+      <div class="glabel">Vista previa</div>${prev}
+      <label class="task" style="gap:10px;cursor:pointer"><input type="checkbox" ${I.upd?'checked':''} onchange="S.imp.upd=this.checked" style="width:20px;height:20px;accent-color:var(--teal)"><span style="font-size:14px">Si un cliente ya existe con el mismo nombre, actualizar sus datos en lugar de duplicarlo</span></label>
+      <button class="btn btn-p" id="bimp" style="margin-top:8px" onclick="hacerImport()">${ic('check')}Importar ${I.rows.length} clientes</button>
+      <button class="btn btn-s" style="margin-top:10px" onclick="importar()">Elegir otro archivo</button>`;
+  }
+  $('panel').innerHTML = `<div class="grab"></div><div class="ph"><h2>Importar clientes</h2><button class="x" onclick="closeSheet()" aria-label="Cerrar">${ic('x')}</button></div><div class="pb">${body}</div>`;
+}
+window.IM = (k,v) => { S.imp.map[k] = v===''?undefined:Number(v); renderImport(); };
+const mapRow = r => { const c={}; for (const [k] of CF){ const i=S.imp.map[k]; c[k] = i===undefined ? '' : String(r[i]??'').trim(); } return c; };
+function parseCSV(t){
+  t = t.replace(/^\ufeff/,''); const first=t.split(/\r?\n/)[0]||''; const d=[';','\t',','].sort((a,b)=>first.split(b).length-first.split(a).length)[0];
+  const rows=[]; let row=[], cur='', q=false;
+  for (let i=0;i<t.length;i++){ const ch=t[i];
+    if (q){ if(ch==='"'){ if(t[i+1]==='"'){cur+='"';i++;} else q=false; } else cur+=ch; }
+    else if (ch==='"') q=true; else if (ch===d){ row.push(cur); cur=''; } else if (ch==='\n'||ch==='\r'){ if(ch==='\r'&&t[i+1]==='\n')i++; row.push(cur); rows.push(row); row=[]; cur=''; } else cur+=ch; }
+  if (cur||row.length){ row.push(cur); rows.push(row); }
+  return rows;
+}
+let XLSX = null;
+document.addEventListener('change', async e => {
+  if (e.target.id!=='impf') return; const f=e.target.files[0]; e.target.value=''; if(!f) return;
+  try {
+    let rows;
+    if (/\.(csv|txt)$/i.test(f.name)) { const buf=await f.arrayBuffer(); let t=new TextDecoder('utf-8').decode(buf); if (t.includes('\ufffd')) t=new TextDecoder('windows-1252').decode(buf); rows=parseCSV(t); }
+    else { toast('Leyendo Excel…'); if(!XLSX) XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs');
+      const wb=XLSX.read(await f.arrayBuffer()); rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,defval:'',raw:false}); }
+    rows = rows.filter(r=>r.some(c=>String(c).trim()));
+    if (rows.length<2) return dialog('Archivo vacío','No he encontrado filas con datos debajo de la cabecera.','<button class="btn btn-d" onclick="closeDialog()">Aceptar</button>');
+    const headers = rows[0].map(h=>String(h).trim()), map={};
+    for (const [k,,syn] of CF){ const ns=syn.map(norm); let i=headers.findIndex(h=>ns.includes(norm(h))); if(i<0) i=headers.findIndex(h=>ns.some(s=>s.length>3&&norm(h).includes(s))); if(i>=0 && !Object.values(map).includes(i)) map[k]=i; }
+    if (map.nombre===undefined) map.nombre = 0;
+    S.imp = {name:f.name, headers, rows:rows.slice(1), map, upd:true}; renderImport();
+  } catch(err){ dialog('No se pudo leer el archivo', err.message, '<button class="btn btn-d" onclick="closeDialog()">Aceptar</button>'); }
+});
+window.hacerImport = async () => {
+  const I=S.imp, byName=new Map(S.clientes.map(c=>[norm(c.nombre),c])), now=new Date().toISOString(), seen=new Set();
+  const list=[]; let nuevos=0, act=0;
+  for (const r of I.rows){ const c=mapRow(r); if(!c.nombre) continue; const key=norm(c.nombre);
+    if (seen.has(key)) continue; seen.add(key);
+    const ex = I.upd && byName.get(key);
+    if (ex){ act++; const m={...ex}; for(const [k] of CF) if(c[k]) m[k]=c[k]; m.actualizado=now; list.push(m); }
+    else { nuevos++; list.push({...c, id:newId(), creado:now, actualizado:now}); } }
+  if (!list.length) return dialog('Nada que importar','Ninguna fila tiene nombre de cliente. Revisa qué columna corresponde al nombre.','<button class="btn btn-d" onclick="closeDialog()">Aceptar</button>');
+  const b=$('bimp'); b.disabled=true; b.innerHTML='<div class="spin" style="width:20px;height:20px;border-width:2px"></div> Importando…';
+  try { await saveClientesLote(list, n=>{ b.innerHTML=`Importando ${n} de ${list.length}…`; });
+    closeSheet(); S.cprov=S.cpob=S.csec=S.cvis=S.cq=''; go('clientes');
+    toast(`${nuevos} clientes nuevos${act?`, ${act} actualizados`:''}`);
+  } catch(e){ b.disabled=false; b.innerHTML='Reintentar'; dialog('No se pudo importar', e.code==='permission-denied'?'Falta dar permiso a la base de datos para guardar clientes.':e.message,'<button class="btn btn-d" onclick="closeDialog()">Aceptar</button>'); }
+};
+window.vaciarClientes = () => dialog('Borrar todos los clientes', `Se eliminarán ${S.clientes.length} clientes. Las visitas no se borran. No se puede deshacer.`, `<button class="btn btn-s" onclick="closeDialog()">Cancelar</button><button class="btn" style="background:var(--sin);color:#fff" onclick="closeDialog();confVaciar()">Borrar</button>`);
+window.confVaciar = async () => { try { await borrarClientesLote(S.clientes.map(c=>c.id)); closeSheet(); toast('Clientes borrados'); } catch(e){ toast('Error: '+e.message,false); } };
+window.plantilla = () => {
+  const rows=[['Nombre','Contacto','Teléfono','Email','Dirección','CP','Población','Provincia','Sector','Notas'],['Textiles Ejemplo S.L.','Laura Martínez','961234567','laura@ejemplo.es','Av. de la Industria 12','46980','Paterna','Valencia','Textil','Visitar por la mañana']];
+  const csv='\ufeff'+rows.map(r=>r.map(c=>'"'+c+'"').join(';')).join('\r\n');
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'})); a.download='plantilla-clientes.csv'; document.body.appendChild(a); a.click(); a.remove();
 };
 
 /* ---------- hojas ---------- */

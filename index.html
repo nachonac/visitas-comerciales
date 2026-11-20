@@ -196,7 +196,7 @@ input::placeholder,textarea::placeholder{color:#5f686e}
 input[type=date],input[type=time]{color-scheme:dark}
 .search input{color:var(--ink)}
 .nav{padding-left:8px;padding-right:8px}.nav button{min-width:58px}
-.filters{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+.filters{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:12px}
 .sel{position:relative;display:block;background:var(--card);border:1px solid var(--line);border-radius:12px}
 .sel.on{border-color:var(--teal);background:rgba(20,184,166,.1)}
 .sel::after{content:"";position:absolute;right:12px;top:50%;width:7px;height:7px;border-right:2px solid var(--mut);border-bottom:2px solid var(--mut);transform:translateY(-70%) rotate(45deg);pointer-events:none}
@@ -205,6 +205,18 @@ input[type=date],input[type=time]{color-scheme:dark}
 .mapsel{width:100%;background:none;border:0;outline:0;color:var(--ink);font:inherit;font-size:16px;padding:2px 0;-webkit-appearance:none;appearance:none}
 .rb{display:flex;justify-content:space-between;align-items:center;gap:10px}
 .toast{background:#1c1c1c;color:#fff;border:1px solid #2e2e2e}
+.sug{position:absolute;left:-16px;right:-16px;top:100%;z-index:5;background:#1a1a1a;border:1px solid #2a2a2a;border-radius:14px;box-shadow:0 12px 30px rgba(0,0,0,.6);overflow:hidden}
+.sug:empty{display:none}
+.sug button{display:block;width:100%;text-align:left;padding:11px 16px;border-bottom:1px solid #262626}
+.sug button:last-child{border-bottom:0}
+.sug button b{display:block;font-weight:600;font-size:15px;color:var(--ink)}
+.sug button small{display:block;color:var(--mut);font-size:12.5px;margin-top:2px}
+.sug button:active{background:#232323}
+.sug .none{padding:12px 16px;color:var(--mut);font-size:13px}
+.linked{display:flex;align-items:center;gap:5px;color:#2dd4bf;font-size:12px;margin-top:4px}.linked svg{width:14px;height:14px}
+.sel.txt{display:flex;align-items:center;gap:8px;padding-left:12px}.sel.txt::after{display:none}.sel.txt svg{width:16px;height:16px;color:var(--mut);flex-shrink:0}
+.sel.txt input{flex:1;min-width:0;background:none;border:0;outline:0;color:var(--ink);font:inherit;font-size:13.5px;padding:11px 12px 11px 0}
+.group{overflow:visible}
 </style>
 </head>
 <body>
@@ -237,7 +249,7 @@ const fb = initializeApp({
 const auth = getAuth(fb), db = getFirestore(fb);
 
 /* ---------- utilidades ---------- */
-const $ = id => document.getElementById(id);
+const $ = id => document.getElementById(id); window.$ = $;
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const RES = ['Pendiente','Interesado','Seguimiento','Venta','Sin interés'];
 const TIPOS = ['Presencial','Telefónica','Videollamada','Feria'];
@@ -323,11 +335,17 @@ function compress(file){
   });
 }
 ['cam','gal'].forEach(id => $(id).addEventListener('change', async e => {
-  const f = e.target.files[0]; e.target.value=''; if (!f || !S.form) return;
-  try { S.form.tarjetaData = await compress(f); renderForm(); } catch { toast('No se pudo leer la imagen', false); }
+  const f = e.target.files[0]; e.target.value=''; if (!f) return;
+  const dest = S.photoFor || 'visita';
+  try { const data = await compress(f);
+    if (dest==='cform' && S.cform) { S.cform.tarjetaData = data; renderCliForm(); }
+    else if (dest.startsWith('cli:')) { const c = S.clientes.find(x=>x.id===dest.slice(4)); if (!c) return;
+      await saveCliente({...c, tarjetaData:data, actualizado:new Date().toISOString()}); toast('Tarjeta guardada en la ficha'); cliente(c.id); }
+    else if (S.form) { S.form.tarjetaData = data; renderForm(); }
+  } catch(err) { toast('No se pudo guardar la imagen', false); }
 }));
-window.tomarFoto = () => $('cam').click();
-window.elegirFoto = () => $('gal').click();
+window.tomarFoto = (d='visita') => { S.photoFor=d; $('cam').click(); };
+window.elegirFoto = (d='visita') => { S.photoFor=d; $('gal').click(); };
 window.quitarFoto = () => { S.form.tarjetaData = null; renderForm(); };
 
 /* ---------- auth ---------- */
@@ -357,6 +375,7 @@ function render(){
   if (!S.user) { app.innerHTML = loginView(); return; }
   app.innerHTML = header() + `<div class="content">${S.tab==='inicio' ? homeView() : S.tab==='clientes' ? clientesView() : listView()}</div>` + nav();
   if (S.tab==='clientes' && S._focusC) { const q=$('cq'); if(q){ q.focus(); q.setSelectionRange(q.value.length,q.value.length);} S._focusC=false; }
+  if (S._focusId) { const q=$(S._focusId); if(q){ q.focus(); q.setSelectionRange(q.value.length,q.value.length);} S._focusId=null; }
   if (S.tab==='visitas') { const q=$('q'); if (q && S._focus) { q.focus(); q.setSelectionRange(q.value.length,q.value.length); } }
 }
 function loginView(){
@@ -482,6 +501,19 @@ window.nueva = () => { S.form = blank(); renderForm(); openSheet(); };
 window.editar = id => { S.form = {...S.visitas.find(v=>v.id===id)}; renderForm(); };
 const localDT = iso => { const d=new Date(iso); const p=n=>String(n).padStart(2,'0'); return [`${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`, `${p(d.getHours())}:${p(d.getMinutes())}`]; };
 window.F = (k, v) => { S.form[k] = v; };
+window.cliSug = v => {
+  S.form.cliente = v; const q = norm(v), box = $('sug'); if (!box) return;
+  if (S.form.clienteId) { const c=S.clientes.find(x=>x.id===S.form.clienteId); if (!c || norm(c.nombre)!==q) S.form.clienteId=''; }
+  if (q.length < 2) { box.innerHTML=''; return; }
+  const L = S.clientes.map(c => { const n=norm(c.nombre), o=norm([c.contacto,c.poblacion].join(' '));
+      const sc = n.startsWith(q)?0 : n.split(/[\s.,-]+/).some(w=>w.startsWith(q))?1 : n.includes(q)?2 : o.includes(q)?3 : 9; return [sc,c]; })
+    .filter(x=>x[0]<9).sort((a,b)=>a[0]-b[0]||a[1].nombre.localeCompare(b[1].nombre,'es')).slice(0,7).map(x=>x[1]);
+  box.innerHTML = L.length ? L.map(c=>`<button type="button" onmousedown="event.preventDefault()" onclick="pickCli('${c.id}')"><b>${esc(c.nombre)}</b><small>${esc([c.poblacion,c.contacto].filter(Boolean).join(' · ')||'Sin ciudad')}</small></button>`).join('')
+    : `<div class="none">No está en tu base. Se guardará como cliente nuevo en la visita.</div>`;
+};
+window.pickCli = id => { const c=S.clientes.find(x=>x.id===id); if(!c) return; const f=S.form;
+  f.cliente=c.nombre; f.clienteId=c.id; f.contacto=c.contacto||f.contacto||''; f.telefono=c.telefono||f.telefono||''; f.direccion=fullAddr(c)||f.direccion||'';
+  if (!f.tarjetaData && c.tarjetaData) f.tarjetaData=c.tarjetaData; renderForm(); };
 window.autoCli = v => { const c = S.clientes.find(x=>norm(x.nombre)===norm(v)); if(!c) return; const f=S.form; f.clienteId=c.id; if(!f.contacto) f.contacto=c.contacto||''; if(!f.telefono) f.telefono=c.telefono||''; if(!f.direccion) f.direccion=fullAddr(c); renderForm(); toast('Datos del cliente completados'); };
 window.FD = () => { const d=$('fd').value, t=$('ft').value||'00:00'; if(d) S.form.fecha = new Date(d+'T'+t).toISOString(); };
 window.FS = (k, v) => { S.form[k] = v; renderForm(); };
@@ -493,8 +525,7 @@ function renderForm(){
     <div class="ph"><h2>${f.id?'Editar visita':'Nueva visita'}</h2><button class="x" onclick="closeSheet()" aria-label="Cerrar">${ic('x')}</button></div>
     <div class="pb">
       <div class="group">
-        ${fld('cliente','Cliente *','Escribe o elige de tus clientes','text','autocomplete="off" list="clis" onchange="autoCli(this.value)"')}
-        <datalist id="clis">${[...new Set([...S.clientes.map(c=>c.nombre),...S.visitas.map(v=>v.cliente)])].map(c=>`<option value="${esc(c)}">`).join('')}</datalist>
+        <div class="field" style="position:relative"><label>Cliente *</label><input id="clin" type="text" value="${esc(f.cliente)}" placeholder="Escribe el nombre del cliente" autocomplete="off" autocorrect="off" oninput="cliSug(this.value)" onfocus="cliSug(this.value)" onblur="setTimeout(()=>{const b=$('sug');if(b)b.innerHTML=''},200)">${f.clienteId?`<small class="linked">${ic('check')}Cliente de tu base · datos completados</small>`:''}<div id="sug" class="sug"></div></div>
         <div class="two"><div class="field"><label>Fecha</label><input id="fd" type="date" value="${d}" onchange="FD()"></div><div class="field"><label>Hora</label><input id="ft" type="time" value="${t}" onchange="FD()"></div></div>
       </div>
       <div class="glabel">Tarjeta de visita</div>
@@ -526,7 +557,10 @@ window.guardar = async () => {
   if (!f.cliente.trim()) return dialog('Falta el cliente','Indica el nombre del cliente para guardar la visita.','<button class="btn btn-d" onclick="closeDialog()">Aceptar</button>');
   const v = {...f, cliente:f.cliente.trim(), id: f.id || Date.now().toString(36)+Math.random().toString(36).slice(2,6), actualizado: new Date().toISOString()};
   $('bsave').innerHTML = '<div class="spin" style="width:20px;height:20px;border-width:2px"></div>';
-  try { await saveVisit(v); S.form=null; closeSheet(); toast(f.id?'Visita actualizada':'Visita guardada'); }
+  try { await saveVisit(v);
+    const c = v.clienteId && S.clientes.find(x=>x.id===v.clienteId);
+    if (c && v.tarjetaData && !c.tarjetaData) { try { await saveCliente({...c, tarjetaData:v.tarjetaData}); } catch(_){} }
+    S.form=null; closeSheet(); toast(f.id?'Visita actualizada':'Visita guardada'); }
   catch(e){ renderForm(); dialog('No se pudo guardar', e.code==='permission-denied'?'No tienes permiso para guardar. Vuelve a iniciar sesión.':e.message, '<button class="btn btn-d" onclick="closeDialog()">Aceptar</button>'); }
 };
 
@@ -577,7 +611,7 @@ async function borrarClientesLote(ids){
 const visitasDe = c => S.visitas.filter(v => v.clienteId===c.id || norm(v.cliente)===norm(c.nombre));
 function filtrarClientes(){
   const q = norm(S.cq);
-  let L = S.clientes.filter(c => (!S.cprov || c.provincia===S.cprov) && (!S.cpob || c.poblacion===S.cpob) && (!S.csec || c.sector===S.csec)
+  let L = S.clientes.filter(c => (!S.cprov || c.provincia===S.cprov) && (!S.cpob || norm(c.poblacion).includes(norm(S.cpob))) && (!S.csec || c.sector===S.csec)
     && (!q || norm([c.nombre,c.contacto,c.direccion,c.poblacion,c.provincia,c.cp,c.sector,c.telefono,c.email].join(' ')).includes(q)));
   if (S.cvis) { L = L.filter(c => { const n = visitasDe(c).length; return S.cvis==='con' ? n>0 : n===0; }); }
   return L.sort((a,b)=>a.nombre.localeCompare(b.nombre,'es',{numeric:true}));
@@ -593,10 +627,10 @@ function clientesView(){
   const L = filtrarClientes(), shown = L.slice(0, S.cmax);
   const sel = (id, val, all, opts, fn) => `<label class="sel ${val?'on':''}"><select onchange="${fn}(this.value)"><option value="">${all}</option>${opts.map(o=>`<option ${o===val?'selected':''}>${esc(o)}</option>`).join('')}</select></label>`;
   const activos = [S.cprov,S.cpob,S.csec,S.cvis].filter(Boolean).length;
-  return `<div class="search">${ic('search')}<input id="cq" placeholder="Buscar nombre, población, CP, teléfono…" value="${esc(S.cq)}" oninput="C_q(this.value)"></div>
+  return `<div class="search">${ic('search')}<input id="cq" placeholder="Buscar nombre, persona, ciudad, teléfono…" value="${esc(S.cq)}" oninput="C_q(this.value)"></div>
     <div class="filters">
       ${provs.length?sel('fp',S.cprov,'Todas las provincias',provs,'C_prov'):''}
-      ${pobs.length?sel('fl',S.cpob,'Todas las poblaciones',pobs,'C_pob'):''}
+      <label class="sel txt ${S.cpob?'on':''}">${ic('pin')}<input id="cpob" placeholder="Ciudad" value="${esc(S.cpob)}" autocomplete="off" oninput="C_pob(this.value)"></label>
       ${secs.length?sel('fs',S.csec,'Todos los sectores',secs,'C_sec'):''}
       <label class="sel ${S.cvis?'on':''}"><select onchange="C_vis(this.value)"><option value="">Visitados y sin visitar</option><option value="con" ${S.cvis==='con'?'selected':''}>Ya visitados</option><option value="sin" ${S.cvis==='sin'?'selected':''}>Sin visitar</option></select></label>
     </div>
@@ -609,14 +643,14 @@ function clientesView(){
 function cliCard(c){
   const n = visitasDe(c).length, loc = [c.poblacion, c.provincia].filter(Boolean).join(' · ');
   return `<button class="v" onclick="cliente('${c.id}')">
-    <div class="thumb" style="background:rgba(56,189,248,.14);color:#7dd3fc">${esc(initials(c.nombre))}</div>
+    <div class="thumb" style="background:rgba(56,189,248,.14);color:#7dd3fc">${c.tarjetaData?`<img src="${c.tarjetaData}" alt="">`:esc(initials(c.nombre))}</div>
     <div class="body"><div class="t"><b>${esc(c.nombre)}</b>${n?`<span class="pill" style="background:rgba(20,184,166,.16);color:#2dd4bf">${n} visita${n>1?'s':''}</span>`:`<span class="pill" style="background:#1f1f1f;color:var(--mut)">Sin visitar</span>`}</div>
     <div class="meta">${esc(loc||c.direccion||'Sin dirección')}${c.sector?' · '+esc(c.sector):''}</div>
     ${c.contacto?`<div class="note">${esc(c.contacto)}${c.telefono?' · '+esc(c.telefono):''}</div>`:''}</div></button>`;
 }
 window.C_q = v => { S.cq=v; S.cmax=100; S._focusC=true; render(); };
 window.C_prov = v => { S.cprov=v; S.cpob=''; S.cmax=100; render(); };
-window.C_pob = v => { S.cpob=v; S.cmax=100; render(); };
+window.C_pob = v => { S.cpob=v; S.cmax=100; S._focusId='cpob'; render(); };
 window.C_sec = v => { S.csec=v; S.cmax=100; render(); };
 window.C_vis = v => { S.cvis=v; S.cmax=100; render(); };
 window.C_reset = () => { S.cprov=S.cpob=S.csec=S.cvis=''; S.cq=''; render(); };
@@ -626,13 +660,14 @@ window.cliente = id => {
   const tel=(c.telefono||'').replace(/\s/g,''), addr=fullAddr(c), V=visitasDe(c).sort((a,b)=>b.fecha.localeCompare(a.fecha));
   $('panel').innerHTML = `<div class="grab"></div>
     <div class="ph"><span></span><button class="x" onclick="closeSheet()" aria-label="Cerrar">${ic('x')}</button></div>
-    <div class="hero"><div class="in">${c.sector?`<span class="pill" style="background:rgba(56,189,248,.14);color:#7dd3fc">${esc(c.sector)}</span>`:''}
+    <div class="hero">${c.tarjetaData?`<img src="${c.tarjetaData}" onclick="verFoto(this.src)" alt="Tarjeta de visita"><div class="acts" style="display:flex;gap:8px;padding:10px 16px 0"><button class="btn-sm btn-s" style="flex:1" onclick="tomarFoto('cli:${c.id}')">${ic('cam')}Repetir foto</button><button class="btn-sm btn-r" style="flex:1" onclick="quitarTarjetaCli('${c.id}')">${ic('trash')}Quitar</button></div>`:''}<div class="in">${c.sector?`<span class="pill" style="background:rgba(56,189,248,.14);color:#7dd3fc">${esc(c.sector)}</span>`:''}
       <h3 style="margin-top:10px">${esc(c.nombre)}</h3><div style="color:var(--mut);margin-top:4px">${esc([c.poblacion,c.provincia].filter(Boolean).join(' · ')||'Sin población')}</div></div></div>
     <div class="actions">
       <a class="${addr?'':'dis'}" href="${addr?mapsUrl(addr):'#'}" target="_blank" rel="noopener"><div class="ic" style="background:rgba(20,184,166,.16);color:#2dd4bf">${ic('nav')}</div>Cómo llegar</a>
       <a class="${tel?'':'dis'}" href="tel:${esc(tel)}"><div class="ic" style="background:rgba(56,189,248,.15);color:#38bdf8">${ic('phone')}</div>Llamar</a>
       <button onclick="visitaDe('${c.id}')"><div class="ic" style="background:rgba(245,158,11,.15);color:#fbbf24">${ic('plus')}</div>Nueva visita</button>
     </div>
+    ${c.tarjetaData?'':`<div style="margin:0 18px 14px"><button class="drop" style="margin:0;padding:20px" onclick="tomarFoto('cli:${c.id}')"><div class="ic">${ic('cam')}</div><b style="color:var(--ink)">Fotografiar tarjeta de visita</b><span style="font-size:13px">o <u onclick="event.stopPropagation();elegirFoto('cli:${c.id}')">elegir de la galería</u></span></button></div>`}
     <div class="info group">
       ${c.contacto?`<div class="row-i">${ic('user')}<div><small>Contacto</small><p>${esc(c.contacto)}</p></div></div>`:''}
       ${c.telefono?`<div class="row-i">${ic('phone')}<div><small>Teléfono</small><p>${esc(c.telefono)}</p></div></div>`:''}
@@ -645,8 +680,10 @@ window.cliente = id => {
       <div class="two" style="margin-top:14px;gap:10px"><button class="btn btn-s" onclick="editarCliente('${c.id}')">${ic('edit')}Editar</button><button class="btn btn-r" onclick="borrarCliente('${c.id}')">${ic('trash')}Eliminar</button></div></div>`;
   openSheet();
 };
+window.quitarTarjetaCli = id => dialog('Quitar tarjeta','¿Quieres quitar la foto de la tarjeta de este cliente?',`<button class="btn btn-s" onclick="closeDialog()">Cancelar</button><button class="btn btn-d" onclick="closeDialog();confQuitarTarjeta('${id}')">Quitar</button>`);
+window.confQuitarTarjeta = async id => { const c=S.clientes.find(x=>x.id===id); const n={...c}; delete n.tarjetaData; try { await saveCliente(n); cliente(id); toast('Tarjeta quitada'); } catch(e){ toast('Error: '+e.message,false); } };
 window.visitaDe = id => { const c=S.clientes.find(x=>x.id===id);
-  S.form = {...blank(), cliente:c.nombre, clienteId:c.id, contacto:c.contacto||'', telefono:c.telefono||'', direccion:fullAddr(c)}; renderForm(); $('panel').scrollTop=0; };
+  S.form = {...blank(), cliente:c.nombre, clienteId:c.id, contacto:c.contacto||'', telefono:c.telefono||'', direccion:fullAddr(c), tarjetaData:c.tarjetaData||null}; renderForm(); $('panel').scrollTop=0; };
 window.borrarCliente = id => { const c=S.clientes.find(x=>x.id===id);
   dialog('Eliminar cliente', `Se eliminará ${c.nombre} de tu base de clientes. Sus visitas no se borran.`, `<button class="btn btn-s" onclick="closeDialog()">Cancelar</button><button class="btn" style="background:var(--sin);color:#fff" onclick="closeDialog();confBorrarCliente('${id}')">Eliminar</button>`); };
 window.confBorrarCliente = async id => { closeSheet(); try { await borrarClientesLote([id]); toast('Cliente eliminado'); } catch(e){ toast('Error: '+e.message,false); } };
@@ -654,12 +691,16 @@ window.confBorrarCliente = async id => { closeSheet(); try { await borrarCliente
 window.nuevoCliente = () => { S.cform = {id:'',nombre:'',contacto:'',telefono:'',email:'',direccion:'',cp:'',poblacion:'',provincia:'',sector:'',notas:''}; renderCliForm(); openSheet(); };
 window.editarCliente = id => { S.cform = {...S.clientes.find(x=>x.id===id)}; renderCliForm(); };
 window.CFv = (k,v) => { S.cform[k]=v; };
+window.renderCliForm = renderCliForm;
 function renderCliForm(){
   const f=S.cform, fld=(k,lab,ph,type='text')=>`<div class="field"><label>${lab}</label><input type="${type}" value="${esc(f[k])}" placeholder="${ph}" oninput="CFv('${k}',this.value)"></div>`;
   $('panel').innerHTML = `<div class="grab"></div><div class="ph"><h2>${f.id?'Editar cliente':'Nuevo cliente'}</h2><button class="x" onclick="closeSheet()" aria-label="Cerrar">${ic('x')}</button></div>
     <div class="pb"><div class="group">${fld('nombre','Nombre / empresa *','Nombre del cliente')}${fld('sector','Sector / tipo','Ej.: textil, imprenta')}</div>
+    <div class="glabel">Tarjeta de visita</div>
+    ${f.tarjetaData ? `<div class="photo"><img src="${f.tarjetaData}" onclick="verFoto(this.src)" alt="Tarjeta"><div class="acts"><button class="btn-sm btn-s" onclick="tomarFoto('cform')">${ic('cam')}Repetir</button><button class="btn-sm btn-r" onclick="S.cform.tarjetaData=null;renderCliForm()">${ic('trash')}Quitar</button></div></div>`
+      : `<button class="drop" onclick="tomarFoto('cform')"><div class="ic">${ic('cam')}</div><b style="color:var(--ink)">Fotografiar tarjeta</b><span style="font-size:13px">o <u onclick="event.stopPropagation();elegirFoto('cform')">elegir de la galería</u></span></button>`}
     <div class="group">${fld('contacto','Persona de contacto','Nombre y cargo')}${fld('telefono','Teléfono','600 000 000','tel')}${fld('email','Email','cliente@empresa.es','email')}</div>
-    <div class="group">${fld('direccion','Dirección','Calle y número')}<div class="two">${fld('cp','Código postal','46000')}${fld('poblacion','Población','Valencia')}</div>${fld('provincia','Provincia','Valencia')}</div>
+    <div class="group">${fld('direccion','Dirección','Calle y número')}<div class="two">${fld('cp','Código postal','46000')}${fld('poblacion','Ciudad','Valencia')}</div>${fld('provincia','Provincia','Valencia')}</div>
     <div class="group"><div class="field"><label>Notas</label><textarea placeholder="Horario, observaciones…" oninput="CFv('notas',this.value)">${esc(f.notas)}</textarea></div></div>
     <button class="btn btn-d" id="bcsave" onclick="guardarCliente()">${ic('check')}Guardar cliente</button></div>`;
 }

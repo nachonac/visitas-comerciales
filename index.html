@@ -614,6 +614,19 @@ const CF = [ // campo, etiqueta, sinónimos de cabecera
   ['notas','Notas',['notas','observaciones','comentarios','nota','notes']],
 ];
 const norm = s => String(s??'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim();
+const PROV_CP = {'01':'Álava','02':'Albacete','03':'Alicante','04':'Almería','05':'Ávila','06':'Badajoz','07':'Baleares','08':'Barcelona','09':'Burgos','10':'Cáceres','11':'Cádiz','12':'Castellón','13':'Ciudad Real','14':'Córdoba','15':'A Coruña','16':'Cuenca','17':'Girona','18':'Granada','19':'Guadalajara','20':'Gipuzkoa','21':'Huelva','22':'Huesca','23':'Jaén','24':'León','25':'Lleida','26':'La Rioja','27':'Lugo','28':'Madrid','29':'Málaga','30':'Murcia','31':'Navarra','32':'Ourense','33':'Asturias','34':'Palencia','35':'Las Palmas','36':'Pontevedra','37':'Salamanca','38':'Santa Cruz de Tenerife','39':'Cantabria','40':'Segovia','41':'Sevilla','42':'Soria','43':'Tarragona','44':'Teruel','45':'Toledo','46':'Valencia','47':'Valladolid','48':'Bizkaia','49':'Zamora','50':'Zaragoza','51':'Ceuta','52':'Melilla'};
+const PROV_ALIAS = {'alacant':'Alicante','castello':'Castellón','castellon de la plana':'Castellón','valencia':'Valencia','sagunto':'Valencia','puerto de sagunto':'Valencia','elche':'Alicante','elx':'Alicante','alcoy':'Alicante','alcoi':'Alicante','aspe':'Alicante','gandia':'Valencia','molina de segura':'Murcia','coslada':'Madrid','getafe':'Madrid','alcala de henares':'Madrid','leganes':'Madrid','mostoles':'Madrid','fuenlabrada':'Madrid','alcobendas':'Madrid','torrejon de ardoz':'Madrid','paterna':'Valencia','manises':'Valencia','torrent':'Valencia','alzira':'Valencia','vila-real':'Castellón','villarreal':'Castellón','hospitalet':'Barcelona','sabadell':'Barcelona','terrassa':'Barcelona','badalona':'Barcelona','vigo':'Pontevedra','gijon':'Asturias','oviedo':'Asturias','bilbao':'Bizkaia','san sebastian':'Gipuzkoa','donostia':'Gipuzkoa','vitoria':'Álava','pamplona':'Navarra','logrono':'La Rioja','santander':'Cantabria','cartagena':'Murcia','lorca':'Murcia','jerez':'Cádiz','algeciras':'Cádiz','marbella':'Málaga','ibiza':'Baleares','palma':'Baleares','mallorca':'Baleares','tenerife':'Santa Cruz de Tenerife','gran canaria':'Las Palmas','vizcaya':'Bizkaia','guipuzcoa':'Gipuzkoa','la coruna':'A Coruña','coruna':'A Coruña','gerona':'Girona','lerida':'Lleida','orense':'Ourense','baleares':'Baleares','dos hermanas':'Sevilla','mairena del aljarafe':'Sevilla','altea':'Alicante','benidorm':'Alicante','pobla de vallbona':'Valencia','la pobla de vallbona':'Valencia','alcorcon':'Madrid','sant boi':'Barcelona','rubi':'Barcelona','mataro':'Barcelona','granollers':'Barcelona','elda':'Alicante','petrer':'Alicante','ibi':'Alicante','onil':'Alicante','crevillent':'Alicante','orihuela':'Alicante','torrevieja':'Alicante','ontinyent':'Valencia','xativa':'Valencia','sueca':'Valencia','burjassot':'Valencia','mislata':'Valencia','quart de poblet':'Valencia','aldaia':'Valencia','alaquas':'Valencia','silla':'Valencia','catarroja':'Valencia','onda':'Castellón','burriana':'Castellón','almassora':'Castellón','nules':'Castellón','benicarlo':'Castellón','vinaros':'Castellón'};
+const _provN = Object.fromEntries(Object.values(PROV_CP).map(v=>[norm(v),v]));
+const provDe = c => { if (c._pv!==undefined) return c._pv;
+  const t = [c.cp, c.direccion, c.poblacion, c.provincia].filter(Boolean).join(' ');
+  let r = '';
+  if (c.provincia) r = _provN[norm(c.provincia)] || PROV_ALIAS[norm(c.provincia)] || c.provincia;
+  if (!r) { const m = t.match(/(?:^|\D)(\d{5})(?:\D|$)/); if (m && PROV_CP[m[1].slice(0,2)]) r = PROV_CP[m[1].slice(0,2)]; }
+  if (!r && /\b\d{4}-\d{3}\b/.test(t)) r = 'Portugal';
+  if (!r) { const n = norm(t); for (const k of [...Object.keys(_provN), ...Object.keys(PROV_ALIAS)].sort((a,b)=>b.length-a.length)) if (new RegExp('(^|[^a-z])'+k.replace(/[-]/g,'\\-')+'([^a-z]|$)').test(n)) { r = _provN[k] || PROV_ALIAS[k]; break; } }
+  if (!r && /portugal|porto|lisboa|sintra/.test(norm(t))) r = 'Portugal';
+  try { Object.defineProperty(c,'_pv',{value:r,writable:true,enumerable:false,configurable:true}); } catch(_){}
+  return r; };
 const fullAddr = c => [c.direccion, [c.cp, c.poblacion].filter(Boolean).join(' '), c.provincia].filter(Boolean).join(', ');
 const newId = () => Date.now().toString(36)+Math.random().toString(36).slice(2,8);
 const demoClientes = () => [
@@ -647,8 +660,8 @@ async function borrarClientesLote(ids){
 const visitasDe = c => S.visitas.filter(v => v.clienteId===c.id || norm(v.cliente)===norm(c.nombre));
 function filtrarClientes(){
   const q = norm(S.cq);
-  let L = S.clientes.filter(c => (!S.cprov || c.provincia===S.cprov) && (!S.cpob || norm(c.poblacion).includes(norm(S.cpob))) && (!S.csec || c.sector===S.csec)
-    && (!q || norm([c.nombre,c.contacto,c.direccion,c.poblacion,c.provincia,c.cp,c.sector,c.telefono,c.email].join(' ')).includes(q)));
+  let L = S.clientes.filter(c => (!S.cprov || (S.cprov==='—' ? !provDe(c) : provDe(c)===S.cprov)) && (!S.csec || c.sector===S.csec)
+    && (!q || norm([c.nombre,c.contacto,c.direccion,c.poblacion,provDe(c),c.cp,c.sector,c.telefono,c.email].join(' ')).includes(q)));
   if (S.cvis) { L = L.filter(c => { const n = visitasDe(c).length; return S.cvis==='con' ? n>0 : n===0; }); }
   return L.sort((a,b)=>a.nombre.localeCompare(b.nombre,'es',{numeric:true}));
 }
@@ -657,16 +670,15 @@ function clientesView(){
   const C = S.clientes;
   if (!C.length) return `<div class="empty"><div class="ic">${ic('user')}</div><b style="color:var(--ink);font-weight:600">Aún no tienes clientes</b><p style="margin:6px 0 18px">Importa tu base de datos desde Excel o CSV, o añádelos uno a uno.</p>
     <button class="btn btn-p" onclick="importar()">${ic('up')}Importar clientes</button><button class="btn btn-s" style="margin-top:10px" onclick="nuevoCliente()">${ic('plus')}Añadir cliente</button></div>`;
-  const provs = uniq(C.map(c=>c.provincia));
-  const pobs = uniq(C.filter(c=>!S.cprov||c.provincia===S.cprov).map(c=>c.poblacion));
+  const provs = uniq(C.map(provDe)).sort((a,b)=>a.localeCompare(b,'es')); const _pc = {}; C.forEach(c=>{const k=provDe(c)||'—'; _pc[k]=(_pc[k]||0)+1;});
   const secs = uniq(C.map(c=>c.sector));
   const L = filtrarClientes(), shown = L.slice(0, S.cmax);
+  const provSel = (opts, cnt) => `<label class="sel ${S.cprov?'on':''}"><select onchange="C_prov(this.value)"><option value="">Todas las provincias</option>${opts.map(o=>`<option value="${esc(o)}" ${o===S.cprov?'selected':''}>${esc(o)} (${cnt[o]||0})</option>`).join('')}${cnt['—']?`<option value="—" ${S.cprov==='—'?'selected':''}>Sin provincia (${cnt['—']})</option>`:''}</select></label>`;
   const sel = (id, val, all, opts, fn) => `<label class="sel ${val?'on':''}"><select onchange="${fn}(this.value)"><option value="">${all}</option>${opts.map(o=>`<option ${o===val?'selected':''}>${esc(o)}</option>`).join('')}</select></label>`;
-  const activos = [S.cprov,S.cpob,S.csec,S.cvis].filter(Boolean).length;
+  const activos = [S.cprov,S.csec,S.cvis].filter(Boolean).length;
   return `<div class="search">${ic('search')}<input id="cq" placeholder="Buscar nombre, persona, ciudad, teléfono…" value="${esc(S.cq)}" oninput="C_q(this.value)"></div>
     <div class="filters">
-      ${provs.length?sel('fp',S.cprov,'Todas las provincias',provs,'C_prov'):''}
-      <label class="sel txt ${S.cpob?'on':''}">${ic('pin')}<input id="cpob" placeholder="Ciudad" value="${esc(S.cpob)}" autocomplete="off" oninput="C_pob(this.value)"></label>
+      ${provSel(provs,_pc)}
       ${secs.length?sel('fs',S.csec,'Todos los sectores',secs,'C_sec'):''}
       <label class="sel ${S.cvis?'on':''}"><select onchange="C_vis(this.value)"><option value="">Visitados y sin visitar</option><option value="con" ${S.cvis==='con'?'selected':''}>Ya visitados</option><option value="sin" ${S.cvis==='sin'?'selected':''}>Sin visitar</option></select></label>
     </div>
@@ -677,7 +689,7 @@ function clientesView(){
     ${L.length && fullAddr(L[0]) ? '' : ''}`;
 }
 function cliCard(c){
-  const n = visitasDe(c).length, loc = [c.poblacion, c.provincia].filter(Boolean).join(' · ');
+  const n = visitasDe(c).length, loc = [c.poblacion, provDe(c)].filter(Boolean).join(' · ');
   return `<button class="v" onclick="cliente('${c.id}')">
     <div class="thumb" style="background:rgba(56,189,248,.14);color:#7dd3fc">${c.tarjetaData?`<img src="${c.tarjetaData}" alt="">`:esc(initials(c.nombre))}</div>
     <div class="body"><div class="t"><b>${esc(c.nombre)}</b>${n?`<span class="pill" style="background:rgba(20,184,166,.16);color:#2dd4bf">${n} visita${n>1?'s':''}</span>`:`<span class="pill" style="background:#1f1f1f;color:var(--mut)">Sin visitar</span>`}</div>
@@ -697,7 +709,7 @@ window.cliente = id => {
   $('panel').innerHTML = `<div class="grab"></div>
     <div class="ph"><span></span><button class="x" onclick="closeSheet()" aria-label="Cerrar">${ic('x')}</button></div>
     <div class="hero">${c.tarjetaData?`<img src="${c.tarjetaData}" onclick="verFoto(this.src)" alt="Tarjeta de visita"><div class="acts" style="display:flex;gap:8px;padding:10px 16px 0"><button class="btn-sm btn-s" style="flex:1" onclick="tomarFoto('cli:${c.id}')">${ic('cam')}Repetir foto</button><button class="btn-sm btn-r" style="flex:1" onclick="quitarTarjetaCli('${c.id}')">${ic('trash')}Quitar</button></div>`:''}<div class="in">${c.sector?`<span class="pill" style="background:rgba(56,189,248,.14);color:#7dd3fc">${esc(c.sector)}</span>`:''}
-      <h3 style="margin-top:10px">${esc(c.nombre)}</h3><div style="color:var(--mut);margin-top:4px">${esc([c.poblacion,c.provincia].filter(Boolean).join(' · ')||'Sin población')}</div></div></div>
+      <h3 style="margin-top:10px">${esc(c.nombre)}</h3><div style="color:var(--mut);margin-top:4px">${esc([c.poblacion,provDe(c)].filter(Boolean).join(' · ')||'Sin población')}</div></div></div>
     <div class="actions">
       <a class="${addr?'':'dis'}" href="${addr?mapsUrl(addr):'#'}" target="_blank" rel="noopener"><div class="ic" style="background:rgba(20,184,166,.16);color:#2dd4bf">${ic('nav')}</div>Cómo llegar</a>
       <a class="${tel?'':'dis'}" href="tel:${esc(tel)}"><div class="ic" style="background:rgba(56,189,248,.15);color:#38bdf8">${ic('phone')}</div>Llamar</a>

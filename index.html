@@ -217,6 +217,41 @@ input[type=date],input[type=time]{color-scheme:dark}
 .sel.txt{display:flex;align-items:center;gap:8px;padding-left:12px}.sel.txt::after{display:none}.sel.txt svg{width:16px;height:16px;color:var(--mut);flex-shrink:0}
 .sel.txt input{flex:1;min-width:0;background:none;border:0;outline:0;color:var(--ink);font:inherit;font-size:13.5px;padding:11px 12px 11px 0}
 .group{overflow:visible}
+.seg2{display:grid;grid-template-columns:1fr 1fr;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:4px;gap:4px}
+.seg2 button{padding:10px;border-radius:10px;font-weight:600;font-size:14px;color:var(--mut)}
+.seg2 button.on{background:var(--teal);color:#042f2e}
+.per{display:flex;align-items:center;justify-content:space-between;margin:12px 0}
+.per b{font-weight:600;font-size:16px}
+.per button{width:40px;height:40px;border-radius:12px;background:var(--card);border:1px solid var(--line);font-size:22px;line-height:1;color:var(--ink)}
+.per button:disabled{opacity:.3}
+.kmv{text-align:right;flex-shrink:0;font-size:14px}.kmv b{display:block;font-weight:600}.kmv small{color:var(--mut);font-size:11px}
+#dlg p{white-space:pre-line}
+a.btn{text-decoration:none}
+#print{display:none}
+@media print{
+  body{background:#fff!important;padding:0}
+  #app,.nav,.sheet,.toast,.dialog,.viewer{display:none!important}
+  #print{display:block;color:#111;font-family:'General Sans',Arial,sans-serif;font-size:11px;padding:0}
+  @page{size:A4;margin:14mm}
+  .p-h{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #14b8a6;padding-bottom:10px;margin-bottom:12px}
+  .p-h h1{font-size:19px;margin:0 0 4px}.p-h p{margin:0;color:#555}
+  .p-r{text-align:right;color:#333}.p-r span{color:#777;font-size:10px}
+  .p-k{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:10px}
+  .p-k div{border:1px solid #ddd;border-radius:6px;padding:8px;color:#555}.p-k b{display:block;font-size:16px;color:#111}
+  .p-s{color:#333;margin:6px 0 10px}
+  #print,#print *{box-sizing:border-box}
+  table{width:100%;border-collapse:collapse;table-layout:auto}
+  td{overflow-wrap:break-word}
+  .p-k{grid-template-columns:repeat(auto-fit,minmax(90px,1fr))!important}
+  th{text-align:left;background:#f1f5f4;border-bottom:1px solid #ccc;padding:6px;font-size:10px;text-transform:uppercase;letter-spacing:.03em}
+  td{border-bottom:1px solid #e5e5e5;padding:6px;vertical-align:top}td span{color:#666}
+  .n{text-align:right;white-space:nowrap}
+  tr{page-break-inside:avoid}
+  tfoot td{font-weight:700;border-top:2px solid #111;border-bottom:0;font-size:12px}
+  .p-w{color:#b45309;margin-top:8px}
+  .p-f{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:50px}.p-f div{border-top:1px solid #333;padding-top:6px;color:#555}
+  .p-x{color:#999;font-size:9px;margin-top:20px}
+}
 </style>
 </head>
 <body>
@@ -225,6 +260,7 @@ input[type=date],input[type=time]{color-scheme:dark}
 <div class="viewer" id="viewer" onclick="this.style.display='none'"><img id="vimg" alt="Tarjeta de visita"><span>Toca para cerrar</span></div>
 <div class="dialog" id="dialog"><div id="dlg"></div></div>
 <div class="toast" id="toast"></div>
+<div id="print"></div>
 <input type="file" id="cam" accept="image/*" capture="environment" hidden>
 <input type="file" id="gal" accept="image/*" hidden>
 <input type="file" id="impf" accept=".csv,.txt,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" hidden>
@@ -287,7 +323,7 @@ window.closeDialog = () => $('dialog').style.display='none';
 window.verFoto = src => { $('vimg').src=src; $('viewer').style.display='flex'; };
 
 /* ---------- estado ---------- */
-let S = { user:undefined, demo:false, visitas:[], tab:'inicio', q:'', filtro:'', online:true, unsub:null, form:null, detail:null, clientes:[], unsubC:null, cq:'', cprov:'', cpob:'', csec:'', cvis:'', cmax:100, imp:null, cform:null };
+let S = { user:undefined, demo:false, visitas:[], tab:'inicio', q:'', filtro:'', online:true, unsub:null, form:null, detail:null, clientes:[], unsubC:null, cq:'', cprov:'', cpob:'', csec:'', cvis:'', cmax:100, imp:null, cform:null, aj:{origen:'',volver:true,tarifa:0.26,nombre:'',matricula:'',empresa:''}, km:{}, rmodo:'semana', roff:0, unsubA:null, unsubK:null };
 window.S = S;
 
 const demoData = () => {
@@ -304,7 +340,7 @@ const demoData = () => {
 /* ---------- datos ---------- */
 function listen(){
   if (S.unsub) S.unsub();
-  listenClientes();
+  listenClientes(); listenExtra();
   if (S.demo) { S.visitas = demoData(); render(); return; }
   S.unsub = onSnapshot(collection(db,'usuarios',S.user.uid,'visitas'), snap => {
     S.visitas = snap.docs.map(d => d.data()); S.online = true; render();
@@ -373,7 +409,7 @@ function render(){
   const app = $('app');
   if (S.user === undefined) { app.innerHTML = '<div class="loading"><div class="spin"></div></div>'; return; }
   if (!S.user) { app.innerHTML = loginView(); return; }
-  app.innerHTML = header() + `<div class="content">${S.tab==='inicio' ? homeView() : S.tab==='clientes' ? clientesView() : listView()}</div>` + nav();
+  app.innerHTML = header() + `<div class="content">${S.tab==='inicio' ? homeView() : S.tab==='clientes' ? clientesView() : S.tab==='informes' ? informesView() : listView()}</div>` + nav();
   if (S.tab==='clientes' && S._focusC) { const q=$('cq'); if(q){ q.focus(); q.setSelectionRange(q.value.length,q.value.length);} S._focusC=false; }
   if (S._focusId) { const q=$(S._focusId); if(q){ q.focus(); q.setSelectionRange(q.value.length,q.value.length);} S._focusId=null; }
   if (S.tab==='visitas') { const q=$('q'); if (q && S._focus) { q.focus(); q.setSelectionRange(q.value.length,q.value.length); } }
@@ -397,7 +433,7 @@ function header(){
   const h = new Date().getHours(), saludo = h<13?'Buenos días':h<20?'Buenas tardes':'Buenas noches';
   const name = (S.user.email||'').split('@')[0];
   return `<div class="top"><div class="top-row">
-      <div class="hello"><small>${saludo}</small><b>${S.tab==='inicio'?'Resumen comercial':S.tab==='clientes'?'Mis clientes':'Mis visitas'}</b></div>
+      <div class="hello"><small>${saludo}</small><b>${S.tab==='inicio'?'Resumen comercial':S.tab==='clientes'?'Mis clientes':S.tab==='informes'?'Informes':'Mis visitas'}</b></div>
       <button class="avatar" onclick="salir()" aria-label="Cuenta">${esc(initials(name.replace(/[._-]/g,' ')))}</button>
     </div>
     <div class="sync"><span class="dot ${S.online?'':'off'}"></span>${S.demo?'Modo demostración':esc(S.user.email)+' · '+(S.online?'Sincronizado':'Sin conexión')}</div>
@@ -409,7 +445,7 @@ function nav(){
     <button class="${S.tab==='clientes'?'on':''}" onclick="go('clientes')">${ic('user')}Clientes</button>
     <button class="fab" onclick="nueva()" aria-label="Nueva visita">${ic('plus')}</button>
     <button class="${S.tab==='visitas'?'on':''}" onclick="go('visitas')">${ic('list')}Visitas</button>
-    <button onclick="S.tab==='clientes'?importar():exportar()">${ic(S.tab==='clientes'?'up':'down')}${S.tab==='clientes'?'Importar':'Exportar'}</button>
+    <button class="${S.tab==='informes'?'on':''}" onclick="go('informes')">${ic('trend')}Informes</button>
   </nav>`;
 }
 window.go = t => { S.tab = t; S._focus=false; render(); window.scrollTo(0,0); };
@@ -781,6 +817,188 @@ window.plantilla = () => {
   const rows=[['Nombre','Contacto','Teléfono','Email','Dirección','CP','Población','Provincia','Sector','Notas'],['Textiles Ejemplo S.L.','Laura Martínez','961234567','laura@ejemplo.es','Av. de la Industria 12','46980','Paterna','Valencia','Textil','Visitar por la mañana']];
   const csv='\ufeff'+rows.map(r=>r.map(c=>'"'+c+'"').join(';')).join('\r\n');
   const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'})); a.download='plantilla-clientes.csv'; document.body.appendChild(a); a.click(); a.remove();
+};
+
+/* ---------- informes y kilometraje ---------- */
+const DEF_AJ = {origen:'', volver:true, tarifa:0.26, nombre:'', matricula:'', empresa:''};
+const ymd = d => { const p=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`; };
+const visDay = v => ymd(new Date(v.fecha));
+const km1 = n => (Math.round(n*10)/10).toLocaleString('es-ES',{minimumFractionDigits:1,maximumFractionDigits:1});
+const eur2 = n => Number(n||0).toLocaleString('es-ES',{style:'currency',currency:'EUR'});
+function periodo(){
+  const b = new Date(); b.setHours(0,0,0,0);
+  if (S.rmodo==='semana'){ const dow=(b.getDay()+6)%7; b.setDate(b.getDate()-dow+7*S.roff); const e=new Date(b); e.setDate(e.getDate()+6);
+    const f=o=>o.toLocaleDateString('es-ES',{day:'numeric',month:'short'});
+    return {ini:ymd(b), fin:ymd(e), label:`${f(b)} – ${f(e)} ${e.getFullYear()}`, titulo:'Semana del '+b.toLocaleDateString('es-ES',{day:'numeric',month:'long'})}; }
+  const m=new Date(b.getFullYear(), b.getMonth()+S.roff, 1), e=new Date(m.getFullYear(), m.getMonth()+1, 0);
+  const l=m.toLocaleDateString('es-ES',{month:'long',year:'numeric'}); return {ini:ymd(m), fin:ymd(e), label:l[0].toUpperCase()+l.slice(1), titulo:l[0].toUpperCase()+l.slice(1)};
+}
+const enPeriodo = (P) => S.visitas.filter(v => { const d=visDay(v); return d>=P.ini && d<=P.fin; }).sort((a,b)=>a.fecha.localeCompare(b.fecha));
+const presencial = v => (v.tipo==='Presencial' || v.tipo==='Feria') && (v.direccion||'').trim();
+function diasConRuta(P){ const m=new Map(); for (const v of enPeriodo(P).filter(presencial)) { const d=visDay(v); if(!m.has(d)) m.set(d,[]); m.get(d).push(v); } return m; }
+const kmDia = d => { const k=S.km[d]; return k ? Number(k.km||0) : null; };
+
+function listenExtra(){
+  if (S.unsubA) S.unsubA(); if (S.unsubK) S.unsubK();
+  if (S.demo) { S.aj = {...DEF_AJ, origen:'Plaza del Ayuntamiento 1, 46002 Valencia', nombre:'Comercial demo', matricula:'0000 XXX'}; S.km = {}; return; }
+  S.unsubA = onSnapshot(doc(db,'usuarios',S.user.uid,'ajustes','general'), d => { S.aj = {...DEF_AJ, ...(d.data()||{})}; if (S.tab==='informes') render(); }, ()=>{});
+  S.unsubK = onSnapshot(collection(db,'usuarios',S.user.uid,'km'), snap => { S.km = {}; snap.docs.forEach(d=>S.km[d.id]=d.data()); if (S.tab==='informes') render(); }, ()=>{});
+}
+async function saveAj(a){ S.aj=a; if (S.demo) { render(); return; } await setDoc(doc(db,'usuarios',S.user.uid,'ajustes','general'), a); }
+async function saveKm(d, data){ if (S.demo || !data) { if (data) S.km[d]=data; else delete S.km[d]; render(); return; }
+  await setDoc(doc(db,'usuarios',S.user.uid,'km',d), data); }
+
+function informesView(){
+  const P = periodo(), V = enPeriodo(P), ventas = V.filter(v=>v.resultado==='Venta');
+  const imp = ventas.reduce((a,v)=>a+Number(v.importe||0),0), cli = new Set(V.map(v=>norm(v.cliente))).size;
+  const dias = diasConRuta(P), kmTot = [...dias.keys()].reduce((a,d)=>a+(kmDia(d)||0),0), pend=[...dias.keys()].filter(d=>kmDia(d)===null).length;
+  const k = (icn,bg,col,val,lab) => `<div class="kpi"><div class="ic" style="background:${bg};color:${col}">${ic(icn)}</div><b>${val}</b><span>${lab}</span></div>`;
+  const porTipo = TIPOS.map(t=>[t,V.filter(v=>v.tipo===t).length]).filter(x=>x[1]);
+  return `<div class="seg2"><button class="${S.rmodo==='semana'?'on':''}" onclick="R_modo('semana')">Semana</button><button class="${S.rmodo==='mes'?'on':''}" onclick="R_modo('mes')">Mes</button></div>
+    <div class="per"><button onclick="R_off(-1)" aria-label="Anterior">‹</button><b>${P.label}</b><button onclick="R_off(1)" aria-label="Siguiente" ${S.roff>=0?'disabled':''}>›</button></div>
+    <div class="kpis">
+      ${k('cal','rgba(56,189,248,.15)','#38bdf8',V.length,'Visitas realizadas')}
+      ${k('user','rgba(167,139,250,.15)','#a78bfa',cli,'Clientes distintos')}
+      ${k('euro','rgba(245,158,11,.15)','#fbbf24',money(imp),ventas.length+' venta'+(ventas.length==1?'':'s'))}
+      ${k('nav','rgba(20,184,166,.16)','#2dd4bf',km1(kmTot)+' km',eur2(kmTot*S.aj.tarifa)+' en kilometraje')}
+    </div>
+    ${V.length?`<div class="conv"><div class="rb"><b style="font-weight:600">Resultados</b><small style="color:var(--mut)">${porTipo.map(x=>x[1]+' '+x[0].toLowerCase()).join(' · ')}</small></div>
+      <div class="bar">${RES.map(r=>{const n=V.filter(x=>x.resultado===r).length;return n?`<i style="width:${n/V.length*100}%;background:${COL[r]}"></i>`:''}).join('')}</div>
+      <div class="legend">${RES.map(r=>`<span><i style="background:${COL[r]}"></i>${r} ${V.filter(x=>x.resultado===r).length}</span>`).join('')}</div></div>`:''}
+
+    <div class="sec"><h3>Kilometraje</h3><button onclick="ajustesKm()">Ajustes</button></div>
+    ${!S.aj.origen?`<button class="task" onclick="ajustesKm()"><div class="ic" style="background:rgba(245,158,11,.15);color:#fbbf24">${ic('pin')}</div><div style="flex:1;min-width:0"><b>Indica tu punto de salida</b><small>Tu casa u oficina, para calcular los recorridos</small></div></button>`:''}
+    ${dias.size ? [...dias.entries()].map(([d,vs])=>{ const kd=kmDia(d), K=S.km[d];
+        return `<button class="task" onclick="diaKm('${d}')"><div class="ic">${ic('nav')}</div><div style="flex:1;min-width:0"><b>${dayLabel(d+'T12:00')}</b><small>${vs.length} visita${vs.length>1?'s':''} · ${esc(vs.map(v=>v.cliente).join(', '))}</small></div>
+          <div class="kmv">${kd===null?'<span style="color:var(--mut)">Sin calcular</span>':`<b>${km1(kd)} km</b>${K&&K.manual?'<small>manual</small>':''}`}</div></button>`; }).join('')
+      : `<div class="task" style="color:var(--mut)">No hay visitas presenciales con dirección en este periodo.</div>`}
+    ${dias.size?`<button class="btn btn-p" id="bcalc" style="margin-top:6px" onclick="calcPeriodo()">${ic('nav')}${pend?`Calcular kilómetros (${pend} día${pend>1?'s':''} pendiente${pend>1?'s':''})`:'Recalcular kilómetros'}</button>`:''}
+
+    <div class="sec"><h3>Descargar</h3></div>
+    <div class="two" style="gap:10px"><button class="btn btn-s" onclick="imprimir('informe')">${ic('note')}Informe de visitas</button><button class="btn btn-s" onclick="imprimir('km')">${ic('euro')}Nota de kilometraje</button></div>
+    <button class="btn btn-s" style="margin-top:10px" onclick="exportarPeriodo()">${ic('down')}Exportar a Excel (CSV)</button>
+    <p style="color:var(--mut);font-size:12.5px;margin:12px 4px 0;line-height:1.5">Los documentos se abren listos para guardar como PDF o compartir. Distancias por carretera calculadas con OpenStreetMap; revisa y corrige cualquier día si hace falta.</p>`;
+}
+window.R_modo = m => { S.rmodo=m; S.roff=0; render(); };
+window.R_off = n => { S.roff=Math.min(0,S.roff+n); render(); };
+
+/* geocodificación y rutas */
+const geoCache = {};
+const sleep = ms => new Promise(r=>setTimeout(r,ms));
+let lastNom = 0;
+async function fetchJ(u){ let e; for (let k=0;k<3;k++){ try { const r = await fetch(u); if (r.ok) return await r.json(); e = new Error('HTTP '+r.status); } catch(x){ e = x; } await sleep(1200*(k+1)); } throw e; }
+async function geocode(addr){
+  const key = norm(addr); if (geoCache[key]) return geoCache[key];
+  const tries = [addr, addr.replace(/^[^,]*?(\d{5})/, '$1')]; // dirección completa; si falla, desde el CP
+  for (const q of [...new Set(tries)]) {
+    const w = 1100-(Date.now()-lastNom); if (w>0) await sleep(w); lastNom=Date.now();
+    try { const j = await fetchJ('https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=es,pt&accept-language=es&email=nruvira%40gmail.com&q='+encodeURIComponent(q));
+      if (j[0]) return geoCache[key] = [Number(j[0].lon), Number(j[0].lat)]; } catch(_){}
+  }
+  try { const j = await fetchJ('https://photon.komoot.io/api/?limit=1&lang=es&q='+encodeURIComponent(addr));
+    const f = j.features && j.features[0]; if (f) return geoCache[key] = f.geometry.coordinates; } catch(_){}
+  return null;
+}
+async function rutaDia(d, vs){
+  const A = S.aj, puntos = [{n:'Salida', a:A.origen}, ...vs.map(v=>({n:v.cliente, a:v.direccion}))]; if (A.volver) puntos.push({n:'Regreso', a:A.origen});
+  const co = []; const fallos = [];
+  for (const p of puntos) { const c = await geocode(p.a); if (!c) fallos.push(p.n); co.push(c); }
+  if (fallos.length) return {error:'No se encontró la dirección de: '+[...new Set(fallos)].join(', ')};
+  const j = await fetchJ('https://router.project-osrm.org/route/v1/driving/'+co.map(c=>c.join(',')).join(';')+'?overview=false');
+  if (j.code!=='Ok') return {error:'No se pudo calcular la ruta'};
+  const tramos = j.routes[0].legs.map((l,i)=>({de:puntos[i].n, a:puntos[i+1].n, km:Math.round(l.distance/100)/10}));
+  return {fecha:d, km:Math.round(j.routes[0].distance/100)/10, tramos, visitas:vs.map(v=>v.id), origen:A.origen, volver:A.volver, manual:false, calculado:new Date().toISOString()};
+}
+window.calcPeriodo = async () => {
+  if (!S.aj.origen) return ajustesKm();
+  const P = periodo(), dias = [...diasConRuta(P).entries()], b = $('bcalc'); const errs = [];
+  const todo = dias.filter(([d])=>!S.km[d] || !S.km[d].manual);
+  let i = 0;
+  for (const [d, vs] of todo) { i++; if (b) b.innerHTML = `<div class="spin" style="width:18px;height:18px;border-width:2px"></div> Calculando ${i} de ${todo.length}…`;
+    try { const r = await rutaDia(d, vs); if (r.error) errs.push(dayLabel(d+'T12:00')+': '+r.error); else await saveKm(d, r); } catch(e){ errs.push(dayLabel(d+'T12:00')+': sin conexión con el servicio de mapas'); } }
+  render();
+  if (errs.length) dialog('Algunos días no se pudieron calcular', errs.join('\n')+'\n\nRevisa la dirección del cliente o indica los km a mano tocando el día.', '<button class="btn btn-d" onclick="closeDialog()">Aceptar</button>');
+  else toast('Kilómetros calculados');
+};
+window.diaKm = d => {
+  const P = periodo(), vs = diasConRuta(P).get(d) || [], K = S.km[d];
+  $('panel').innerHTML = `<div class="grab"></div><div class="ph"><h2>${dayLabel(d+'T12:00')}</h2><button class="x" onclick="closeSheet()" aria-label="Cerrar">${ic('x')}</button></div>
+    <div class="pb">
+      <div class="group">${K&&K.tramos&&!K.manual ? K.tramos.map(t=>`<div class="row-i">${ic('nav')}<div style="flex:1"><small>${esc(t.de)} → ${esc(t.a)}</small><p>${km1(t.km)} km</p></div></div>`).join('')
+        : vs.map(v=>`<div class="row-i">${ic('pin')}<div><small>${fTime(v.fecha)} · ${esc(v.cliente)}</small><p>${esc(v.direccion)}</p></div></div>`).join('')}</div>
+      <div class="group"><div class="field"><label>Kilómetros del día</label><input id="kmman" type="number" inputmode="decimal" step="0.1" min="0" value="${K?K.km:''}" placeholder="Ej.: 84,5"></div></div>
+      <p style="color:var(--mut);font-size:13px;margin:0 4px 14px">${K? (K.manual?'Indicado a mano.':'Calculado por carretera'+(K.volver?' con regreso al punto de salida.':'.')) : 'Aún sin calcular.'}</p>
+      <button class="btn btn-d" onclick="guardarKm('${d}')">${ic('check')}Guardar kilómetros</button>
+      <div class="two" style="gap:10px;margin-top:10px"><button class="btn btn-s" id="brec" onclick="recalcDia('${d}')">${ic('nav')}Calcular ruta</button>
+      <a class="btn btn-s" href="${rutaMaps(vs)}" target="_blank" rel="noopener">${ic('pin')}Ver en Maps</a></div>
+    </div>`;
+  openSheet();
+};
+const rutaMaps = vs => { const A=S.aj, pts=vs.map(v=>v.direccion); const dest = A.volver&&A.origen ? A.origen : pts[pts.length-1]; const way = A.volver&&A.origen ? pts : pts.slice(0,-1);
+  return 'https://www.google.com/maps/dir/?api=1&travelmode=driving'+(A.origen?'&origin='+encodeURIComponent(A.origen):'')+'&destination='+encodeURIComponent(dest||'')+(way.length?'&waypoints='+encodeURIComponent(way.join('|')):''); };
+window.guardarKm = async d => { const v = parseFloat(String($('kmman').value).replace(',','.'));
+  try { if (isNaN(v)) await saveKm(d, null); else { const K=S.km[d]; const same = K && !K.manual && Math.abs(K.km-v)<0.05;
+      await saveKm(d, same?K:{fecha:d, km:Math.round(v*10)/10, manual:true, visitas:(diasConRuta(periodo()).get(d)||[]).map(x=>x.id), calculado:new Date().toISOString()}); }
+    closeSheet(); toast('Kilómetros guardados'); } catch(e){ toast('Error: '+e.message,false); } };
+window.recalcDia = async d => { if (!S.aj.origen) { closeSheet(); return ajustesKm(); } const vs = diasConRuta(periodo()).get(d)||[]; $('brec').innerHTML='<div class="spin" style="width:18px;height:18px;border-width:2px"></div>';
+  try { const r = await rutaDia(d, vs); if (r.error) { dialog('No se pudo calcular', r.error+'. Puedes escribir los km a mano.', '<button class="btn btn-d" onclick="closeDialog()">Aceptar</button>'); diaKm(d); } else { await saveKm(d, r); diaKm(d); toast(km1(r.km)+' km'); } }
+  catch(e){ diaKm(d); toast('Sin conexión con el servicio de mapas', false); } };
+
+window.ajustesKm = () => { const A = S.aj;
+  $('panel').innerHTML = `<div class="grab"></div><div class="ph"><h2>Ajustes de kilometraje</h2><button class="x" onclick="closeSheet()" aria-label="Cerrar">${ic('x')}</button></div>
+    <div class="pb"><div class="group">
+      <div class="field"><label>Punto de salida (casa u oficina) *</label><input id="aj_o" value="${esc(A.origen)}" placeholder="Calle, número, CP y ciudad"></div>
+      <label class="field" style="display:flex;align-items:center;gap:10px;cursor:pointer"><input id="aj_v" type="checkbox" ${A.volver?'checked':''} style="width:20px;height:20px;accent-color:var(--teal)"><span style="font-size:15px">Contar el regreso al punto de salida</span></label>
+      <div class="field"><label>Importe por kilómetro (€)</label><input id="aj_t" type="number" inputmode="decimal" step="0.01" min="0" value="${A.tarifa}"></div></div>
+      <div class="glabel">Datos para la nota de gastos</div>
+      <div class="group"><div class="field"><label>Tu nombre</label><input id="aj_n" value="${esc(A.nombre)}" placeholder="Nombre y apellidos"></div>
+      <div class="field"><label>Empresa</label><input id="aj_e" value="${esc(A.empresa)}" placeholder="Empresa para la que trabajas"></div>
+      <div class="field"><label>Matrícula del vehículo</label><input id="aj_m" value="${esc(A.matricula)}" placeholder="0000 ABC" autocapitalize="characters"></div></div>
+      <p style="color:var(--mut);font-size:12.5px;margin:0 4px 14px;line-height:1.5">0,26 €/km es el importe exento de IRPF en España para desplazamientos en vehículo propio. Cámbialo si tu empresa paga otro.</p>
+      <button class="btn btn-d" id="bajs" onclick="guardarAj()">${ic('check')}Guardar ajustes</button></div>`;
+  openSheet(); };
+window.guardarAj = async () => { const a = {origen:$('aj_o').value.trim(), volver:$('aj_v').checked, tarifa:parseFloat(String($('aj_t').value).replace(',','.'))||0, nombre:$('aj_n').value.trim(), empresa:$('aj_e').value.trim(), matricula:$('aj_m').value.trim().toUpperCase()};
+  if (!a.origen) return dialog('Falta el punto de salida','Indica la dirección desde la que sales normalmente.','<button class="btn btn-d" onclick="closeDialog()">Aceptar</button>');
+  const cambio = a.origen!==S.aj.origen || a.volver!==S.aj.volver;
+  try { await saveAj(a); closeSheet(); toast('Ajustes guardados');
+    if (cambio && Object.values(S.km).some(k=>!k.manual)) dialog('Recalcular kilómetros','Has cambiado el punto de salida o el regreso. Pulsa «Recalcular kilómetros» para actualizar los días ya calculados de este periodo.','<button class="btn btn-d" onclick="closeDialog()">Aceptar</button>');
+  } catch(e){ toast('Error: '+e.message,false); } };
+
+/* documentos imprimibles / PDF */
+window.imprimir = tipo => {
+  const P = periodo(), V = enPeriodo(P), A = S.aj, dias = diasConRuta(P);
+  const hoy = new Date().toLocaleDateString('es-ES',{day:'numeric',month:'long',year:'numeric'});
+  const cab = (t) => `<div class="p-h"><div><h1>${t}</h1><p>${esc(P.titulo)} · ${P.ini.split('-').reverse().join('/')} al ${P.fin.split('-').reverse().join('/')}</p></div><div class="p-r">${esc(A.nombre||S.user.email)}${A.empresa?'<br>'+esc(A.empresa):''}<br><span>Emitido el ${hoy}</span></div></div>`;
+  let html;
+  if (tipo==='informe') {
+    const ventas=V.filter(v=>v.resultado==='Venta'), imp=ventas.reduce((a,v)=>a+Number(v.importe||0),0), kmT=[...dias.keys()].reduce((a,d)=>a+(kmDia(d)||0),0);
+    html = cab('Informe de visitas comerciales') + `<div class="p-k"><div><b>${V.length}</b>Visitas</div><div><b>${new Set(V.map(v=>norm(v.cliente))).size}</b>Clientes</div><div><b>${ventas.length}</b>Ventas</div><div><b>${money(imp)}</b>Importe</div><div><b>${km1(kmT)}</b>Km</div></div>
+      <p class="p-s">${RES.map(r=>`${r}: <b>${V.filter(v=>v.resultado===r).length}</b>`).join(' · ')}</p>
+      <table><thead><tr><th>Fecha</th><th>Cliente</th><th>Tipo</th><th>Resultado</th><th>Importe</th><th>Notas y próxima acción</th></tr></thead><tbody>
+      ${V.map(v=>`<tr><td>${new Date(v.fecha).toLocaleDateString('es-ES')}<br><span>${fTime(v.fecha)}</span></td><td><b>${esc(v.cliente)}</b>${v.contacto?'<br><span>'+esc(v.contacto)+'</span>':''}</td><td>${v.tipo}</td><td>${v.resultado}</td><td class="n">${v.importe?money(v.importe):''}</td><td>${esc(v.notas||'')}${v.proxAccion?'<br><span>→ '+esc(v.proxAccion)+(v.proxFecha?' ('+v.proxFecha.split('-').reverse().join('/')+')':'')+'</span>':''}</td></tr>`).join('') || '<tr><td colspan="6">Sin visitas en este periodo.</td></tr>'}
+      </tbody></table>`;
+  } else {
+    const filas = [...dias.entries()].map(([d,vs])=>({d, vs, km:kmDia(d)}));
+    const tot = filas.reduce((a,f)=>a+(f.km||0),0), sinCalc = filas.filter(f=>f.km===null).length;
+    html = cab('Nota de gastos de kilometraje') + `<p class="p-s">Vehículo propio${A.matricula?' · Matrícula <b>'+esc(A.matricula)+'</b>':''} · Punto de salida: ${esc(A.origen||'—')}${A.volver?' (ida y vuelta)':''} · Tarifa: <b>${eur2(A.tarifa)}/km</b></p>
+      <table><thead><tr><th>Fecha</th><th>Recorrido / clientes visitados</th><th class="n">Km</th><th class="n">Importe</th></tr></thead><tbody>
+      ${filas.map(f=>`<tr><td>${f.d.split('-').reverse().join('/')}</td><td>${esc(f.vs.map(v=>v.cliente+(v.direccion?' ('+v.direccion.split(',').slice(-2).join(',').trim()+')':'')).join(' → '))}</td><td class="n">${f.km===null?'—':km1(f.km)}</td><td class="n">${f.km===null?'—':eur2(f.km*A.tarifa)}</td></tr>`).join('') || '<tr><td colspan="4">Sin desplazamientos en este periodo.</td></tr>'}
+      </tbody><tfoot><tr><td colspan="2">Total</td><td class="n">${km1(tot)} km</td><td class="n">${eur2(tot*A.tarifa)}</td></tr></tfoot></table>
+      ${sinCalc?`<p class="p-w">Atención: ${sinCalc} día(s) sin kilómetros calculados.</p>`:''}
+      <div class="p-f"><div>Firma del empleado</div><div>Conforme empresa</div></div>`;
+  }
+  $('print').innerHTML = html + `<p class="p-x">Generado con Visitas Comerciales</p>`;
+  setTimeout(()=>window.print(), 50);
+};
+window.exportarPeriodo = () => {
+  const P = periodo(), V = enPeriodo(P), dias = diasConRuta(P), A=S.aj;
+  const h=['Fecha','Hora','Cliente','Contacto','Dirección','Tipo','Resultado','Importe','Notas','Próxima acción','Km del día','Importe km del día'];
+  const seen=new Set();
+  const rows=V.map(v=>{ const d=visDay(v), first=!seen.has(d); seen.add(d); const k = dias.has(d)&&first ? kmDia(d) : null;
+    return [new Date(v.fecha).toLocaleDateString('es-ES'),fTime(v.fecha),v.cliente,v.contacto,v.direccion,v.tipo,v.resultado,v.importe,v.notas,v.proxAccion,k===null?'':String(k).replace('.',','),k===null?'':(k*A.tarifa).toFixed(2).replace('.',',')]; });
+  const csv='\ufeff'+[h,...rows].map(r=>r.map(c=>'"'+String(c??'').replace(/"/g,'""')+'"').join(';')).join('\r\n');
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'})); a.download=`visitas-${P.ini}-a-${P.fin}.csv`; document.body.appendChild(a); a.click(); a.remove();
+  toast('Archivo CSV descargado');
 };
 
 /* ---------- hojas ---------- */

@@ -419,13 +419,13 @@ function loginView(){
     <div class="brand"><div class="logo">${ic('pinW')}</div><b style="font-weight:600">Visitas</b></div>
     <h1>Tus visitas comerciales, siempre contigo.</h1>
     <p class="sub">Registra cada visita, guarda la tarjeta del cliente y llega a su puerta con un toque. Sincronizado en todos tus dispositivos.</p>
-    <div class="glass">
-      <input id="em" type="email" placeholder="Email" autocomplete="username" inputmode="email" autocapitalize="off" autocorrect="off" spellcheck="false">
-      <input id="pw" type="password" placeholder="Contraseña" autocomplete="current-password" autocapitalize="off" autocorrect="off" onkeydown="if(event.key==='Enter')doLogin(false)">
-      <button class="btn btn-p" id="bl" onclick="doLogin(false)">Entrar</button>
-      <button class="btn btn-g" id="bc" onclick="doLogin(true)">Crear cuenta nueva</button>
-      <button class="link" onclick="resetPass()">¿Olvidaste la contraseña?</button>
-    </div>
+    <form class="glass" method="post" action="#" onsubmit="event.preventDefault();doLogin(false)">
+      <input id="em" name="email" type="email" placeholder="Email" autocomplete="username" inputmode="email" autocapitalize="off" autocorrect="off" spellcheck="false">
+      <input id="pw" name="password" type="password" placeholder="Contraseña" autocomplete="current-password" autocapitalize="off" autocorrect="off">
+      <button class="btn btn-p" id="bl" type="submit">Entrar</button>
+      <button class="btn btn-g" id="bc" type="button" onclick="doLogin(true)">Crear cuenta nueva</button>
+      <button class="link" type="button" onclick="resetPass()">¿Olvidaste la contraseña?</button>
+    </form>
     <button class="demo" onclick="demo()">Probar con datos de ejemplo →</button>
   </div>`;
 }

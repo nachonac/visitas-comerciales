@@ -181,6 +181,10 @@ svg.i{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2;stroke
 <input type="file" id="cam" accept="image/*" capture="environment" hidden>
 <input type="file" id="gal" accept="image/*" hidden>
 
+<script>
+window.addEventListener('error',function(e){var d=document.getElementById('jserr');if(!d){d=document.createElement('div');d.id='jserr';d.style.cssText='position:fixed;left:12px;right:12px;bottom:12px;background:#b91c1c;color:#fff;padding:12px;border-radius:12px;font:14px sans-serif;z-index:9999';document.body.appendChild(d);}d.textContent='Error al cargar la app: '+(e.message||'desconocido');});
+setTimeout(function(){if(!window.doLogin){window.doLogin=function(){alert('La app no ha terminado de cargar. Revisa la conexión y recarga la página. Si usas un iPhone, actualiza iOS a una versión reciente.');};}},8000);
+</script>
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js';
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js';
@@ -291,12 +295,12 @@ window.quitarFoto = () => { S.form.tarjetaData = null; renderForm(); };
 /* ---------- auth ---------- */
 onAuthStateChanged(auth, u => { if (S.demo) return; S.user = u; if (u) listen(); else { S.visitas=[]; if(S.unsub)S.unsub(); } render(); });
 window.doLogin = async (crear) => {
-  const em = $('em').value.trim(), pw = $('pw').value;
-  if (!em || pw.length < 6) return dialog('Revisa los datos','Introduce un email válido y una contraseña de al menos 6 caracteres.','<button class="btn btn-d" onclick="closeDialog()">Aceptar</button>');
+  const em = $('em').value.replace(/\s/g,'').toLowerCase(), pw = $('pw').value.trim();
+  if (!/^[^@]+@[^@]+\.[^@]+$/.test(em) || pw.length < 6) return dialog('Revisa los datos', (!/^[^@]+@[^@]+\.[^@]+$/.test(em) ? 'El email no parece válido: «'+em+'».' : 'La contraseña debe tener al menos 6 caracteres (ahora tiene '+pw.length+').'),'<button class="btn btn-d" onclick="closeDialog()">Aceptar</button>');
   const b = crear ? $('bc') : $('bl'); b.innerHTML = '<div class="spin" style="width:20px;height:20px;border-width:2px"></div>';
   try { await (crear ? createUserWithEmailAndPassword : signInWithEmailAndPassword)(auth, em, pw); }
   catch (e) {
-    const m = {'auth/invalid-credential':'Email o contraseña incorrectos.','auth/email-already-in-use':'Ya existe una cuenta con ese email. Pulsa «Entrar».','auth/invalid-email':'El email no es válido.','auth/weak-password':'La contraseña debe tener al menos 6 caracteres.','auth/network-request-failed':'Sin conexión a internet.','auth/too-many-requests':'Demasiados intentos. Espera unos minutos.'}[e.code] || e.message;
+    const m = {'auth/invalid-credential':'Email o contraseña incorrectos.','auth/email-already-in-use':'Ya existe una cuenta con ese email. Pulsa «Entrar».','auth/invalid-email':'El email no es válido.','auth/weak-password':'La contraseña debe tener al menos 6 caracteres.','auth/network-request-failed':'Sin conexión a internet.','auth/too-many-requests':'Demasiados intentos. Espera unos minutos.'}[e.code] || ('Error: ' + (e.code||e.message));
     dialog('No se pudo acceder', m, '<button class="btn btn-d" onclick="closeDialog()">Aceptar</button>'); render();
   }
 };
@@ -322,8 +326,8 @@ function loginView(){
     <h1>Tus visitas comerciales, siempre contigo.</h1>
     <p class="sub">Registra cada visita, guarda la tarjeta del cliente y llega a su puerta con un toque. Sincronizado en todos tus dispositivos.</p>
     <div class="glass">
-      <input id="em" type="email" placeholder="Email" autocomplete="email" inputmode="email">
-      <input id="pw" type="password" placeholder="Contraseña" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin(false)">
+      <input id="em" type="email" placeholder="Email" autocomplete="username" inputmode="email" autocapitalize="off" autocorrect="off" spellcheck="false">
+      <input id="pw" type="password" placeholder="Contraseña" autocomplete="current-password" autocapitalize="off" autocorrect="off" onkeydown="if(event.key==='Enter')doLogin(false)">
       <button class="btn btn-p" id="bl" onclick="doLogin(false)">Entrar</button>
       <button class="btn btn-g" id="bc" onclick="doLogin(true)">Crear cuenta nueva</button>
       <button class="link" onclick="resetPass()">¿Olvidaste la contraseña?</button>
